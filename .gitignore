@@ -1,0 +1,33 @@
+# Virtual environment
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# Environment variables
+.env
+.env.*
+
+# Model artifacts
+models/*.pkl
+models/*.joblib
+
+# Raw/processed datasets
+data/raw/*
+data/processed/*
+
+# Keep data directory documentation
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# OS files
+.DS_Store
+Thumbs.db
