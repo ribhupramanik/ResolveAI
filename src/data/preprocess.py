@@ -154,4 +154,175 @@ def create_leakage_safe_splits(
         .reset_index(drop=True)
     )
 
+    relative_test_size = (
+        test_size /
+        (validation_size + test_size)
+    )
+
+    train_groups, temp_groups = train_test_split(
+        group_df,
+        test_size=validation_size + test_size,
+        stratify=group_df["intent"],
+        random_state=RANDOM_STATE
+    )
+
+    validation_groups, test_groups = train_test_split(
+        temp_groups,
+        test_size=relative_test_size,
+        stratify=temp_groups["intent"],
+        random_state=RANDOM_STATE
+    )
+
+    train_group_keys = set(
+        train_groups["normalized_instruction"]
+    )
+
+    validation_group_keys = set(
+        validation_groups["normalized_instruction"]
+    )
+
+    test_group_keys = set(
+        test_groups["normalized_instruction"]
+    )
+
+    train_df = df[
+        df["normalized_instruction"].isin(
+            train_group_keys
+        )
+    ].copy()
+
+    validation_df = df[
+        df["normalized_instruction"].isin(
+            validation_group_keys
+        )
+    ].copy()
+
+    test_df = df[
+        df["normalized_instruction"].isin(
+            test_group_keys
+        )
+    ].copy()
+
+    return train_df, validation_df, test_df
+
+
+def verify_no_group_leakage(
+    train_df: pd.DataFrame,
+    validation_df: pd.DataFrame,
+    test_df: pd.DataFrame
+) -> bool:
+    """
+    Verify that normalized instructions do not overlap
+    between dataset splits.
+    """
+
+    train_groups = set(
+        train_df["normalized_instruction"]
+    )
+
+    validation_groups = set(
+        validation_df["normalized_instruction"]
+    )
+
+    test_groups = set(
+        test_df["normalized_instruction"]
+    )
+
+    train_validation_overlap = (
+        train_groups & validation_groups
+    )
+
+    train_test_overlap = (
+        train_groups & test_groups
+    )
+
+    validation_test_overlap = (
+        validation_groups & test_groups
+    )
+
+    print(
+        "Train ↔ Validation overlap:",
+        len(train_validation_overlap)
+    )
+
+    print(
+        "Train ↔ Test overlap:",
+        len(train_test_overlap)
+    )
+
+    print(
+        "Validation ↔ Test overlap:",
+        len(validation_test_overlap)
+    )
+
+    return (
+        len(train_validation_overlap) == 0
+        and len(train_test_overlap) == 0
+        and len(validation_test_overlap) == 0
+    )
+
+def print_split_statistics(
+    train_df: pd.DataFrame,
+    validation_df: pd.DataFrame,
+    test_df: pd.DataFrame
+):
+    total = (
+        len(train_df)
+        + len(validation_df)
+        + len(test_df)
+    )
+
+    print("\nDataset Split")
+    print("=" * 50)
+
+    print(
+        f"Train:      {len(train_df):5d} "
+        f"({len(train_df) / total * 100:.2f}%)"
+    )
+
+    print(
+        f"Validation: {len(validation_df):5d} "
+        f"({len(validation_df) / total * 100:.2f}%)"
+    )
+
+    print(
+        f"Test:       {len(test_df):5d} "
+        f"({len(test_df) / total * 100:.2f}%)"
+    )
+
+def save_splits(
+    train_df: pd.DataFrame,
+    validation_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    placeholder_strategy: str
+):
+    output_dir = (
+        PROCESSED_DATA_DIR
+        / placeholder_strategy
+    )
+
+    output_dir.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    train_df.to_csv(
+        output_dir / "train.csv",
+        index=False
+    )
+
+    validation_df.to_csv(
+        output_dir / "validation.csv",
+        index=False
+    )
+
+    test_df.to_csv(
+        output_dir / "test.csv",
+        index=False
+    )
+
+    print(
+        f"\nSaved processed datasets to:"
+        f"\n{output_dir}"
+    )
 
