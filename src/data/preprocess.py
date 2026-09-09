@@ -131,6 +131,12 @@ def prepare_dataframe(
         empty_processed
     )
 
+    if empty_processed > 0:
+      raise ValueError(
+          f"Found {empty_processed} empty processed instructions."
+      )
+
+
     return df
 
 def create_leakage_safe_splits(
@@ -392,21 +398,6 @@ def print_intent_distribution(
     print(distribution.round(2))
 
 
-    print_intent_distribution(
-        train_df,
-        "Train"
-    )
-
-    print_intent_distribution(
-        validation_df,
-        "Validation"
-    )
-
-    print_intent_distribution(
-        test_df,
-        "Test"
-    )
-
 if __name__ == "__main__":
 
     print("=" * 60)
@@ -435,6 +426,22 @@ if __name__ == "__main__":
         validation_df,
         test_df
     )
+
+    print_intent_distribution(
+          train_df,
+         "Train"
+    )
+    
+    print_intent_distribution(
+       validation_df,
+       "Validation"
+    )
+
+    print_intent_distribution(
+        test_df,
+        "Test"
+    )
+    
 
     print("\nLeakage Check")
     print("=" * 50)
