@@ -119,6 +119,18 @@ def prepare_dataframe(
         )
     )
 
+    empty_processed = (
+        df["processed_instruction"]
+        .str.strip()
+        .eq("")
+        .sum()
+    )
+
+    print(
+        "Empty processed instructions:",
+        empty_processed
+    )
+
     return df
 
 def create_leakage_safe_splits(
@@ -142,6 +154,19 @@ def create_leakage_safe_splits(
         raise ValueError(
             "train_size + validation_size + test_size "
             "must equal 1."
+        )
+    group_label_counts = (
+        df.groupby("normalized_instruction")["intent"]
+        .nunique()
+    )
+
+    conflicting_groups = group_label_counts[
+        group_label_counts > 1
+    ]
+
+    if not conflicting_groups.empty:
+        raise ValueError(
+            "Found normalized instructions mapped to multiple intents."
         )
 
     group_df = (
@@ -326,6 +351,62 @@ def save_splits(
         f"\n{output_dir}"
     )
 
+def verify_split_completeness(
+    original_df: pd.DataFrame,
+    train_df: pd.DataFrame,
+    validation_df: pd.DataFrame,
+    test_df: pd.DataFrame
+) -> bool:
+
+    split_total = (
+        len(train_df)
+        + len(validation_df)
+        + len(test_df)
+    )
+
+    print(
+        "Original rows:",
+        len(original_df)
+    )
+
+    print(
+        "Rows across splits:",
+        split_total
+    )
+
+    return split_total == len(original_df)
+
+
+def print_intent_distribution(
+    df: pd.DataFrame,
+    split_name: str
+):
+    distribution = (
+        df["intent"]
+        .value_counts(normalize=True)
+        .sort_index()
+        * 100
+    )
+
+    print(f"\n{split_name} intent distribution:")
+    print(distribution.round(2))
+
+
+    print_intent_distribution(
+        train_df,
+        "Train"
+    )
+
+    print_intent_distribution(
+        validation_df,
+        "Validation"
+    )
+
+    print_intent_distribution(
+        test_df,
+        "Test"
+    )
+
 if __name__ == "__main__":
 
     print("=" * 60)
@@ -367,6 +448,18 @@ if __name__ == "__main__":
     print(
         "\nLeakage-safe split:",
         leakage_safe
+    )
+
+    complete_split = verify_split_completeness(
+        df,
+        train_df,
+        validation_df,
+        test_df
+    )
+
+    print(
+        "\nAll rows assigned:",
+        complete_split
     )
 
     save_splits(
