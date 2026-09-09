@@ -326,3 +326,52 @@ def save_splits(
         f"\n{output_dir}"
     )
 
+if __name__ == "__main__":
+
+    print("=" * 60)
+    print("RESOLVEAI - DATA PREPROCESSING")
+    print("=" * 60)
+
+    df = load_bitext_dataset()
+
+    print(
+        f"\nLoaded dataset with {len(df)} rows."
+    )
+
+    placeholder_strategy = "raw"
+
+    df = prepare_dataframe(
+        df,
+        placeholder_strategy=placeholder_strategy
+    )
+
+    train_df, validation_df, test_df = (
+        create_leakage_safe_splits(df)
+    )
+
+    print_split_statistics(
+        train_df,
+        validation_df,
+        test_df
+    )
+
+    print("\nLeakage Check")
+    print("=" * 50)
+
+    leakage_safe = verify_no_group_leakage(
+        train_df,
+        validation_df,
+        test_df
+    )
+
+    print(
+        "\nLeakage-safe split:",
+        leakage_safe
+    )
+
+    save_splits(
+        train_df,
+        validation_df,
+        test_df,
+        placeholder_strategy
+    )
