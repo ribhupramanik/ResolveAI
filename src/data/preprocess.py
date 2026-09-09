@@ -70,3 +70,53 @@ def process_placeholders(
         "strategy must be one of: "
         "'raw', 'generic', or 'remove'"
     )
+
+def preprocess_text(
+    text: str,
+    placeholder_strategy: str = "raw"
+) -> str:
+    """
+    Apply minimal preprocessing to customer instructions.
+    """
+
+    text = process_placeholders(
+        text,
+        strategy=placeholder_strategy
+    )
+
+    text = text.strip()
+
+    text = re.sub(
+        r"\s+",
+        " ",
+        text
+    )
+
+    return text
+
+def prepare_dataframe(
+    df: pd.DataFrame,
+    placeholder_strategy: str = "raw"
+) -> pd.DataFrame:
+    """
+    Prepare the dataset for machine learning.
+    """
+
+    df = df.copy()
+
+    df["normalized_instruction"] = (
+        df["instruction"]
+        .apply(normalize_for_grouping)
+    )
+
+    df["processed_instruction"] = (
+        df["instruction"]
+        .apply(
+            lambda text: preprocess_text(
+                text,
+                placeholder_strategy
+            )
+        )
+    )
+
+    return df
