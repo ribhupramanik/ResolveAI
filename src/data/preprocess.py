@@ -120,3 +120,38 @@ def prepare_dataframe(
     )
 
     return df
+
+def create_leakage_safe_splits(
+    df: pd.DataFrame,
+    train_size: float = 0.70,
+    validation_size: float = 0.15,
+    test_size: float = 0.15,
+):
+    """
+    Create train, validation, and test datasets while ensuring
+    normalized-equivalent instructions remain in the same split.
+
+    Splitting is stratified at the normalized-instruction group level
+    using intent labels.
+    """
+
+    if round(
+        train_size + validation_size + test_size,
+        10
+    ) != 1.0:
+        raise ValueError(
+            "train_size + validation_size + test_size "
+            "must equal 1."
+        )
+
+    group_df = (
+        df[
+            ["normalized_instruction", "intent"]
+        ]
+        .drop_duplicates(
+            subset=["normalized_instruction"]
+        )
+        .reset_index(drop=True)
+    )
+
+
