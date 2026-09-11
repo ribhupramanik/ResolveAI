@@ -24,6 +24,86 @@ def normalize_for_grouping(text: str) -> str:
 
     return text
 
+def prepare_base_dataframe(
+    df: pd.DataFrame
+) -> pd.DataFrame:
+
+    df = df.copy()
+
+    df["normalized_instruction"] = (
+        df["instruction"]
+        .apply(normalize_for_grouping)
+    )
+
+    return df
+
+def create_preprocessing_variant(
+    df: pd.DataFrame,
+    placeholder_strategy: str
+) -> pd.DataFrame:
+
+    variant_df = df.copy()
+
+    variant_df["processed_instruction"] = (
+        variant_df["instruction"]
+        .apply(
+            lambda text: preprocess_text(
+                text,
+                placeholder_strategy
+            )
+        )
+    )
+
+    empty_processed = (
+        variant_df["processed_instruction"]
+        .str.strip()
+        .eq("")
+        .sum()
+    )
+
+    print(
+        f"{placeholder_strategy}: "
+        f"{empty_processed} empty processed instructions"
+    )
+
+    if empty_processed > 0:
+        raise ValueError(
+            f"{placeholder_strategy} produced "
+            f"{empty_processed} empty instructions."
+        )
+
+    return variant_df
+
+def apply_split_assignments(
+    df: pd.DataFrame,
+    split_assignments: dict
+):
+
+    df = df.copy()
+
+    df["split"] = (
+        df["normalized_instruction"]
+        .map(split_assignments)
+    )
+
+    if df["split"].isna().any():
+        raise ValueError(
+            "Some rows did not receive a split assignment."
+        )
+
+    train_df = df[
+        df["split"] == "train"
+    ].copy()
+
+    validation_df = df[
+        df["split"] == "validation"
+    ].copy()
+
+    test_df = df[
+        df["split"] == "test"
+    ].copy()
+
+    return train_df, validation_df, test_df
 
 PLACEHOLDER_PATTERN = r"\{\{.*?\}\}"
 
