@@ -71,6 +71,69 @@ def process_placeholders(
         "'raw', 'generic', or 'remove'"
     )
 
+
+def create_split_assignments(
+    df: pd.DataFrame,
+    validation_size: float = 0.15,
+    test_size: float = 0.15
+) -> dict:
+    """
+    Assign every normalized-instruction group to exactly one
+    train, validation, or test split.
+    """
+
+    group_label_counts = (
+        df.groupby("normalized_instruction")["intent"]
+        .nunique()
+    )
+
+    if (group_label_counts > 1).any():
+        raise ValueError(
+            "Normalized instructions contain conflicting intent labels."
+        )
+
+    group_df = (
+        df[
+            ["normalized_instruction", "intent"]
+        ]
+        .drop_duplicates(
+            subset=["normalized_instruction"]
+        )
+        .reset_index(drop=True)
+    )
+
+    train_groups, temp_groups = train_test_split(
+        group_df,
+        test_size=validation_size + test_size,
+        stratify=group_df["intent"],
+        random_state=RANDOM_STATE
+    )
+
+    relative_test_size = (
+        test_size /
+        (validation_size + test_size)
+    )
+
+    validation_groups, test_groups = train_test_split(
+        temp_groups,
+        test_size=relative_test_size,
+        stratify=temp_groups["intent"],
+        random_state=RANDOM_STATE
+    )
+
+    split_assignments = {}
+
+    for key in train_groups["normalized_instruction"]:
+        split_assignments[key] = "train"
+
+    for key in validation_groups["normalized_instruction"]:
+        split_assignments[key] = "validation"
+
+    for key in test_groups["normalized_instruction"]:
+        split_assignments[key] = "test"
+
+    return split_assignments
+
 def preprocess_text(
     text: str,
     placeholder_strategy: str = "raw"
