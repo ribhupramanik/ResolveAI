@@ -553,68 +553,75 @@ if __name__ == "__main__":
         f"\nLoaded dataset with {len(df)} rows."
     )
 
-    placeholder_strategy = "raw"
+    df = prepare_base_dataframe(df)
 
-    df = prepare_dataframe(
-        df,
-        placeholder_strategy=placeholder_strategy
+    split_assignments = (
+        create_split_assignments(df)
     )
 
-    train_df, validation_df, test_df = (
-        create_leakage_safe_splits(df)
-    )
+    strategies = [
+        "raw",
+        "generic",
+        "remove"
+    ]
 
-    print_split_statistics(
-        train_df,
-        validation_df,
-        test_df
-    )
+    for strategy in strategies:
 
-    print_intent_distribution(
-          train_df,
-         "Train"
-    )
-    
-    print_intent_distribution(
-       validation_df,
-       "Validation"
-    )
+        print("\n" + "=" * 60)
+        print(
+            f"PLACEHOLDER STRATEGY: "
+            f"{strategy.upper()}"
+        )
+        print("=" * 60)
 
-    print_intent_distribution(
-        test_df,
-        "Test"
-    )
-    
+        variant_df = (
+            create_preprocessing_variant(
+                df,
+                strategy
+            )
+        )
 
-    print("\nLeakage Check")
-    print("=" * 50)
+        train_df, validation_df, test_df = (
+            apply_split_assignments(
+                variant_df,
+                split_assignments
+            )
+        )
 
-    leakage_safe = verify_no_group_leakage(
-        train_df,
-        validation_df,
-        test_df
-    )
+        print_split_statistics(
+            train_df,
+            validation_df,
+            test_df
+        )
 
-    print(
-        "\nLeakage-safe split:",
-        leakage_safe
-    )
+        leakage_safe = verify_no_group_leakage(
+            train_df,
+            validation_df,
+            test_df
+        )
 
-    complete_split = verify_split_completeness(
-        df,
-        train_df,
-        validation_df,
-        test_df
-    )
+        print(
+            "Leakage-safe:",
+            leakage_safe
+        )
 
-    print(
-        "\nAll rows assigned:",
-        complete_split
-    )
+        complete_split = (
+            verify_split_completeness(
+                variant_df,
+                train_df,
+                validation_df,
+                test_df
+            )
+        )
 
-    save_splits(
-        train_df,
-        validation_df,
-        test_df,
-        placeholder_strategy
-    )
+        print(
+            "All rows assigned:",
+            complete_split
+        )
+
+        save_splits(
+            train_df,
+            validation_df,
+            test_df,
+            strategy
+        )
