@@ -269,148 +269,6 @@ def preprocess_text(
 
     return text
 
-def prepare_dataframe(
-    df: pd.DataFrame,
-    placeholder_strategy: str = "raw"
-) -> pd.DataFrame:
-    """
-    Prepare the dataset for machine learning.
-    """
-
-    df = df.copy()
-
-    df["normalized_instruction"] = (
-        df["instruction"]
-        .apply(normalize_for_grouping)
-    )
-
-    df["processed_instruction"] = (
-        df["instruction"]
-        .apply(
-            lambda text: preprocess_text(
-                text,
-                placeholder_strategy
-            )
-        )
-    )
-
-    empty_processed = (
-        df["processed_instruction"]
-        .str.strip()
-        .eq("")
-        .sum()
-    )
-
-    print(
-        "Empty processed instructions:",
-        empty_processed
-    )
-
-    if empty_processed > 0:
-      raise ValueError(
-          f"Found {empty_processed} empty processed instructions."
-      )
-
-
-    return df
-
-def create_leakage_safe_splits(
-    df: pd.DataFrame,
-    train_size: float = 0.70,
-    validation_size: float = 0.15,
-    test_size: float = 0.15,
-):
-    """
-    Create train, validation, and test datasets while ensuring
-    normalized-equivalent instructions remain in the same split.
-
-    Splitting is stratified at the normalized-instruction group level
-    using intent labels.
-    """
-
-    if round(
-        train_size + validation_size + test_size,
-        10
-    ) != 1.0:
-        raise ValueError(
-            "train_size + validation_size + test_size "
-            "must equal 1."
-        )
-    group_label_counts = (
-        df.groupby("normalized_instruction")["intent"]
-        .nunique()
-    )
-
-    conflicting_groups = group_label_counts[
-        group_label_counts > 1
-    ]
-
-    if not conflicting_groups.empty:
-        raise ValueError(
-            "Found normalized instructions mapped to multiple intents."
-        )
-
-    group_df = (
-        df[
-            ["normalized_instruction", "intent"]
-        ]
-        .drop_duplicates(
-            subset=["normalized_instruction"]
-        )
-        .reset_index(drop=True)
-    )
-
-    relative_test_size = (
-        test_size /
-        (validation_size + test_size)
-    )
-
-    train_groups, temp_groups = train_test_split(
-        group_df,
-        test_size=validation_size + test_size,
-        stratify=group_df["intent"],
-        random_state=RANDOM_STATE
-    )
-
-    validation_groups, test_groups = train_test_split(
-        temp_groups,
-        test_size=relative_test_size,
-        stratify=temp_groups["intent"],
-        random_state=RANDOM_STATE
-    )
-
-    train_group_keys = set(
-        train_groups["normalized_instruction"]
-    )
-
-    validation_group_keys = set(
-        validation_groups["normalized_instruction"]
-    )
-
-    test_group_keys = set(
-        test_groups["normalized_instruction"]
-    )
-
-    train_df = df[
-        df["normalized_instruction"].isin(
-            train_group_keys
-        )
-    ].copy()
-
-    validation_df = df[
-        df["normalized_instruction"].isin(
-            validation_group_keys
-        )
-    ].copy()
-
-    test_df = df[
-        df["normalized_instruction"].isin(
-            test_group_keys
-        )
-    ].copy()
-
-    return train_df, validation_df, test_df
-
 
 def verify_no_group_leakage(
     train_df: pd.DataFrame,
@@ -685,6 +543,19 @@ if __name__ == "__main__":
             train_df,
             validation_df,
             test_df
+        )
+
+        processed_text_safe = (
+            verify_processed_text_leakage(
+                train_df,
+                validation_df,
+                test_df
+            )
+        )
+
+        print(
+            "Processed-text leakage-safe:",
+            processed_text_safe
         )
 
         print(
