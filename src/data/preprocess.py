@@ -35,6 +35,11 @@ def prepare_base_dataframe(
         .apply(normalize_for_grouping)
     )
 
+    df["split_group_key"] = (
+        df["instruction"]
+        .apply(create_split_group_key)
+    )
+
     return df
 
 def create_preprocessing_variant(
@@ -151,6 +156,25 @@ def process_placeholders(
         "'raw', 'generic', or 'remove'"
     )
 
+def create_split_group_key(text: str) -> str:
+    """
+    Create the grouping key used for train/validation/test splitting.
+
+    Placeholders are removed before normalization so that different
+    placeholder variants which collapse to the same model text remain
+    in the same split.
+    """
+
+    text = process_placeholders(
+        text,
+        strategy="remove"
+    )
+
+    text = text.lower().strip()
+    text = re.sub(r"\s+", " ", text)
+
+    return text
+
 
 def create_split_assignments(
     df: pd.DataFrame,
@@ -158,26 +182,36 @@ def create_split_assignments(
     test_size: float = 0.15
 ) -> dict:
     """
-    Assign every normalized-instruction group to exactly one
+    Assign every split-group key to exactly one
     train, validation, or test split.
     """
 
     group_label_counts = (
-        df.groupby("normalized_instruction")["intent"]
+        df.groupby("split_group_key")["intent"]
         .nunique()
     )
 
-    if (group_label_counts > 1).any():
+    conflicting_groups = group_label_counts[
+        group_label_counts > 1
+    ]
+
+    print(
+        "Conflicting split-group keys:",
+        len(conflicting_groups)
+    )
+
+    if not conflicting_groups.empty:
         raise ValueError(
-            "Normalized instructions contain conflicting intent labels."
+            "Some split-group keys map to multiple intents. "
+            "Inspect conflicting groups before splitting."
         )
 
     group_df = (
         df[
-            ["normalized_instruction", "intent"]
+            ["split_group_key", "intent"]
         ]
         .drop_duplicates(
-            subset=["normalized_instruction"]
+            subset=["split_group_key"]
         )
         .reset_index(drop=True)
     )
@@ -203,16 +237,17 @@ def create_split_assignments(
 
     split_assignments = {}
 
-    for key in train_groups["normalized_instruction"]:
+    for key in train_groups["split_group_key"]:
         split_assignments[key] = "train"
 
-    for key in validation_groups["normalized_instruction"]:
+    for key in validation_groups["split_group_key"]:
         split_assignments[key] = "validation"
 
-    for key in test_groups["normalized_instruction"]:
+    for key in test_groups["split_group_key"]:
         split_assignments[key] = "test"
 
     return split_assignments
+
 
 def preprocess_text(
     text: str,
