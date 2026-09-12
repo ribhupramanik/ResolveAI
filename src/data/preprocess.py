@@ -86,10 +86,7 @@ def apply_split_assignments(
 
     df = df.copy()
 
-    df["split"] = (
-        df["normalized_instruction"]
-        .map(split_assignments)
-    )
+    df["split"] = (df["split_group_key"].map(split_assignments))
 
     if df["split"].isna().any():
         raise ValueError(
@@ -420,21 +417,17 @@ def verify_no_group_leakage(
     validation_df: pd.DataFrame,
     test_df: pd.DataFrame
 ) -> bool:
-    """
-    Verify that normalized instructions do not overlap
-    between dataset splits.
-    """
 
     train_groups = set(
-        train_df["normalized_instruction"]
+        train_df["split_group_key"]
     )
 
     validation_groups = set(
-        validation_df["normalized_instruction"]
+        validation_df["split_group_key"]
     )
 
     test_groups = set(
-        test_df["normalized_instruction"]
+        test_df["split_group_key"]
     )
 
     train_validation_overlap = (
@@ -450,17 +443,76 @@ def verify_no_group_leakage(
     )
 
     print(
-        "Train ↔ Validation overlap:",
+        "Split-key Train ↔ Validation overlap:",
         len(train_validation_overlap)
     )
 
     print(
-        "Train ↔ Test overlap:",
+        "Split-key Train ↔ Test overlap:",
         len(train_test_overlap)
     )
 
     print(
-        "Validation ↔ Test overlap:",
+        "Split-key Validation ↔ Test overlap:",
+        len(validation_test_overlap)
+    )
+
+    return (
+        len(train_validation_overlap) == 0
+        and len(train_test_overlap) == 0
+        and len(validation_test_overlap) == 0
+    )
+
+def verify_processed_text_leakage(
+    train_df: pd.DataFrame,
+    validation_df: pd.DataFrame,
+    test_df: pd.DataFrame
+) -> bool:
+    """
+    Check whether identical processed model inputs occur
+    across dataset splits.
+    """
+
+    def model_text_set(df):
+        return set(
+            df["processed_instruction"]
+            .str.lower()
+            .str.strip()
+            .str.replace(
+                r"\s+",
+                " ",
+                regex=True
+            )
+        )
+
+    train_texts = model_text_set(train_df)
+    validation_texts = model_text_set(validation_df)
+    test_texts = model_text_set(test_df)
+
+    train_validation_overlap = (
+        train_texts & validation_texts
+    )
+
+    train_test_overlap = (
+        train_texts & test_texts
+    )
+
+    validation_test_overlap = (
+        validation_texts & test_texts
+    )
+
+    print(
+        "Processed-text Train ↔ Validation overlap:",
+        len(train_validation_overlap)
+    )
+
+    print(
+        "Processed-text Train ↔ Test overlap:",
+        len(train_test_overlap)
+    )
+
+    print(
+        "Processed-text Validation ↔ Test overlap:",
         len(validation_test_overlap)
     )
 
