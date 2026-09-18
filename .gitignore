@@ -20,6 +20,7 @@ __pycache__/
 models/*.pkl
 models/*.joblib
 *models
+*artifacts
 
 # Raw/processed datasets
 data/raw/*
