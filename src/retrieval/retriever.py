@@ -47,6 +47,15 @@ class SemanticRetriever:
             METADATA_PATH
         )
 
+        # Validate embedding matrix shape
+        if self.embeddings.ndim != 2:
+            raise ValueError(
+                "Corpus embeddings must be "
+                "a 2D matrix."
+            )
+
+        # Ensure embedding rows correspond
+        # exactly to metadata rows
         if (
             len(self.embeddings)
             != len(self.metadata)
@@ -71,6 +80,11 @@ class SemanticRetriever:
             raise ValueError(
                 "top_k must be at least 1."
             )
+
+        # Prevent asking for more results
+        # than exist in the corpus
+        if top_k > len(self.metadata):
+            top_k = len(self.metadata)
 
         query_embedding = (
             self.embedding_service.encode(

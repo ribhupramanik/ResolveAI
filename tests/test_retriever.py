@@ -46,3 +46,33 @@ def test_invalid_top_k_raises_error(
             "where is my refund",
             top_k=0
         )
+
+def test_similarity_values_are_valid(
+    retriever
+):
+    results = retriever.search(
+        "where is my refund",
+        top_k=5
+    )
+
+    assert (
+        results["similarity"]
+        <= 1.0 + 1e-6
+    ).all()
+
+    assert (
+        results["similarity"]
+        >= -1.0 - 1e-6
+    ).all()
+
+def test_top_k_larger_than_corpus(
+    retriever
+):
+    results = retriever.search(
+        "where is my refund",
+        top_k=50000
+    )
+
+    assert len(results) == len(
+        retriever.metadata
+    )
