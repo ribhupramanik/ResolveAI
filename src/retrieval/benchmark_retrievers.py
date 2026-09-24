@@ -647,66 +647,66 @@ def main():
     # pgvector HNSW configurations
     #
 
-    for ef_search in EF_SEARCH_VALUES:
+        for ef_search in EF_SEARCH_VALUES:
 
-        start = time.perf_counter()
+            start = time.perf_counter()
 
-        hnsw_results = (
-            pgvector_search(
-                query_vector,
-                use_hnsw=True,
-                ef_search=ef_search,
+            hnsw_results = (
+                pgvector_search(
+                    query_vector,
+                    use_hnsw=True,
+                    ef_search=ef_search,
+                )
             )
-        )
 
-        elapsed_ms = (
-            time.perf_counter()
-            - start
-        ) * 1000
+            elapsed_ms = (
+                time.perf_counter()
+                - start
+            ) * 1000
 
-        metrics = (
-            hnsw_metrics[
-                ef_search
-            ]
-        )
-
-        metrics["times"].append(
-            elapsed_ms
-        )
-
-        metrics["id_top1"].append(
-            top1_id_agreement(
-                exact_results,
-                hnsw_results,
+            metrics = (
+                hnsw_metrics[
+                    ef_search
+                ]
             )
-        )
 
-        metrics[
-            "content_top1"
-        ].append(
-            top1_content_agreement(
-                exact_results,
-                hnsw_results,
+            metrics["times"].append(
+                elapsed_ms
             )
-        )
 
-        metrics[
-            "id_recall5"
-        ].append(
-            id_overlap(
-                exact_results,
-                hnsw_results,
+            metrics["id_top1"].append(
+                top1_id_agreement(
+                    exact_results,
+                    hnsw_results,
+                )
             )
-        )
 
-        metrics[
-            "content_recall5"
-        ].append(
-            content_overlap(
-                exact_results,
-                hnsw_results,
+            metrics[
+                "content_top1"
+            ].append(
+                top1_content_agreement(
+                    exact_results,
+                    hnsw_results,
+                )
             )
-        )
+
+            metrics[
+                "id_recall5"
+            ].append(
+                id_overlap(
+                    exact_results,
+                    hnsw_results,
+                )
+            )
+
+            metrics[
+                "content_recall5"
+            ].append(
+                content_overlap(
+                    exact_results,
+                    hnsw_results,
+                )
+            )
 
     print(
         "\nNUMPY EXACT"

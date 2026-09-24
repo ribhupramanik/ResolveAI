@@ -5,6 +5,7 @@ from sqlalchemy import (
     select,
 )
 
+from sqlalchemy import text
 from src.db.database import SessionLocal
 from src.db.models import SupportTicket
 from src.retrieval.embeddings import (
@@ -13,6 +14,7 @@ from src.retrieval.embeddings import (
 
 
 EXPECTED_EMBEDDING_DIM = 384
+HNSW_EF_SEARCH = 120
 
 
 class PgVectorRetriever:
@@ -116,6 +118,23 @@ class PgVectorRetriever:
         )
 
         with SessionLocal() as session:
+
+            session.execute(
+                text(
+                    """
+                    SELECT set_config(
+                        'hnsw.ef_search',
+                        :value,
+                        true
+                    )
+                    """
+                ),
+                {
+                    "value": str(
+                        HNSW_EF_SEARCH
+                    )
+                },
+            )
 
             rows = (
                 session.execute(
