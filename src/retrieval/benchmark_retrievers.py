@@ -14,6 +14,13 @@ from src.db.models import SupportTicket
 from src.retrieval.embeddings import EmbeddingService
 
 
+EF_SEARCH_VALUES = [
+    40,
+    80,
+    120,
+    200,
+]
+
 PROJECT_ROOT = (
     Path(__file__)
     .resolve()
@@ -269,6 +276,7 @@ def numpy_search(
 def pgvector_search(
     query_vector,
     use_hnsw,
+    ef_search=40,
 ):
 
     distance = (
@@ -302,9 +310,19 @@ def pgvector_search(
 
             session.execute(
                 text(
-                    "SET LOCAL "
-                    "enable_indexscan = on"
-                )
+                     """
+                  SELECT set_config(
+                      'hnsw.ef_search',
+                      :value,
+                      true
+                  )
+                  """
+                ),
+                {
+                  "value": str(
+                      ef_search
+                  )
+              },
             )
 
         else:
@@ -506,14 +524,16 @@ def main():
             use_hnsw=False,
         )
 
-        pgvector_search(
-            query_vector,
-            use_hnsw=True,
-        )
+        for ef_search in EF_SEARCH_VALUES:
+
+            pgvector_search(
+                query_vector,
+                use_hnsw=True,
+                ef_search=ef_search,
+            )
 
     numpy_times = []
     exact_times = []
-    hnsw_times = []
 
     #
     # NumPy vs pgvector exact
@@ -529,11 +549,17 @@ def main():
     # pgvector exact vs HNSW
     #
 
-    hnsw_id_top1 = []
-    hnsw_content_top1 = []
+    hnsw_metrics = {}
 
-    hnsw_id_top5 = []
-    hnsw_content_top5 = []
+    for ef_search in EF_SEARCH_VALUES:
+
+        hnsw_metrics[ef_search] = {
+            "times": [],
+            "id_top1": [],
+            "content_top1": [],
+            "id_recall5": [],
+            "content_recall5": [],
+        }
 
     print(
         "Running benchmark..."
@@ -586,27 +612,6 @@ def main():
         )
 
         #
-        # pgvector HNSW
-        #
-
-        start = time.perf_counter()
-
-        hnsw_results = (
-            pgvector_search(
-                query_vector,
-                use_hnsw=True,
-            )
-        )
-
-        hnsw_times.append(
-            (
-                time.perf_counter()
-                - start
-            )
-            * 1000
-        )
-
-        #
         # NumPy vs pgvector exact
         #
 
@@ -638,32 +643,65 @@ def main():
             )
         )
 
-        #
-        # pgvector exact vs HNSW
-        #
+    #
+    # pgvector HNSW configurations
+    #
 
-        hnsw_id_top1.append(
+    for ef_search in EF_SEARCH_VALUES:
+
+        start = time.perf_counter()
+
+        hnsw_results = (
+            pgvector_search(
+                query_vector,
+                use_hnsw=True,
+                ef_search=ef_search,
+            )
+        )
+
+        elapsed_ms = (
+            time.perf_counter()
+            - start
+        ) * 1000
+
+        metrics = (
+            hnsw_metrics[
+                ef_search
+            ]
+        )
+
+        metrics["times"].append(
+            elapsed_ms
+        )
+
+        metrics["id_top1"].append(
             top1_id_agreement(
                 exact_results,
                 hnsw_results,
             )
         )
 
-        hnsw_content_top1.append(
+        metrics[
+            "content_top1"
+        ].append(
             top1_content_agreement(
                 exact_results,
                 hnsw_results,
             )
         )
 
-        hnsw_id_top5.append(
+        metrics[
+            "id_recall5"
+        ].append(
             id_overlap(
                 exact_results,
                 hnsw_results,
             )
         )
 
-        hnsw_content_top5.append(
+        metrics[
+            "content_recall5"
+        ].append(
             content_overlap(
                 exact_results,
                 hnsw_results,
@@ -718,44 +756,61 @@ def main():
         )
     )
 
-    print(
-        "\nPGVECTOR HNSW"
-    )
+    
+    for ef_search in EF_SEARCH_VALUES:
 
-    print(
-        summarize(
-            hnsw_times
+        metrics = (
+            hnsw_metrics[
+                ef_search
+            ]
         )
-    )
 
-    print(
-        "ID Top-1 agreement vs PG exact:",
-        np.mean(
-            hnsw_id_top1
+        print(
+            f"\nPGVECTOR HNSW "
+            f"(ef_search={ef_search})"
         )
-    )
 
-    print(
-        "Content Top-1 agreement vs PG exact:",
-        np.mean(
-            hnsw_content_top1
+        print(
+            summarize(
+                metrics["times"]
+            )
         )
-    )
 
-    print(
-        "ID Recall@5 vs PG exact:",
-        np.mean(
-            hnsw_id_top5
+        print(
+            "ID Top-1 agreement vs PG exact:",
+            np.mean(
+                metrics[
+                    "id_top1"
+                ]
+            )
         )
-    )
 
-    print(
-        "Content Recall@5 vs PG exact:",
-        np.mean(
-            hnsw_content_top5
+        print(
+            "Content Top-1 agreement vs PG exact:",
+            np.mean(
+                metrics[
+                    "content_top1"
+                ]
+            )
         )
-    )
 
+        print(
+            "ID Recall@5 vs PG exact:",
+            np.mean(
+                metrics[
+                    "id_recall5"
+                ]
+            )
+        )
+
+        print(
+            "Content Recall@5 vs PG exact:",
+            np.mean(
+                metrics[
+                    "content_recall5"
+                ]
+            )
+        )
 
 if __name__ == "__main__":
     main()
