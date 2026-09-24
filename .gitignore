@@ -20,7 +20,8 @@ __pycache__/
 models/*.pkl
 models/*.joblib
 *models
-*artifacts
+artifacts/retrieval/corpus_embeddings.npy
+artifacts/retrieval/corpus_metadata.csv
 
 # Raw/processed datasets
 data/raw/*
