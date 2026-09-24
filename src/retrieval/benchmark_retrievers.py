@@ -1,7 +1,10 @@
+from collections import Counter
+from pathlib import Path
 import statistics
 import time
 
 import numpy as np
+import pandas as pd
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -9,62 +12,273 @@ from sqlalchemy.orm import Session
 from src.db.database import engine
 from src.db.models import SupportTicket
 from src.retrieval.embeddings import EmbeddingService
-from src.retrieval.retriever import SemanticRetriever
 
 
-TEST_QUERIES = [
-    "my refund still hasn't arrived",
-    "where is my order",
-    "I forgot my password",
-    "how can I delete my account",
-    "what payment methods do you accept",
-    "I want to change my shipping address",
-    "how long does delivery take",
-    "I need a copy of my invoice",
-]
+PROJECT_ROOT = (
+    Path(__file__)
+    .resolve()
+    .parents[2]
+)
+
+VALIDATION_PATH = (
+    PROJECT_ROOT
+    / "data"
+    / "processed"
+    / "generic"
+    / "validation.csv"
+)
+
+EMBEDDINGS_PATH = (
+    PROJECT_ROOT
+    / "artifacts"
+    / "retrieval"
+    / "corpus_embeddings.npy"
+)
+
+METADATA_PATH = (
+    PROJECT_ROOT
+    / "artifacts"
+    / "retrieval"
+    / "corpus_metadata.csv"
+)
 
 
 TOP_K = 5
-REPEATS = 10
+SAMPLE_SIZE = 300
+RANDOM_STATE = 42
+WARMUP_QUERIES = 10
 
 
-def percentile_95(values):
+def summarize(values):
 
-    return float(
-        np.percentile(
-            values,
-            95
+    return {
+        "mean_ms": statistics.mean(
+            values
+        ),
+        "median_ms": statistics.median(
+            values
+        ),
+        "p95_ms": float(
+            np.percentile(
+                values,
+                95
+            )
+        ),
+    }
+
+
+def load_validation_queries():
+
+    validation_df = pd.read_csv(
+        VALIDATION_PATH
+    )
+
+    if (
+        "processed_instruction"
+        not in validation_df.columns
+    ):
+        raise ValueError(
+            "processed_instruction missing "
+            "from validation data."
+        )
+
+    sample_size = min(
+        SAMPLE_SIZE,
+        len(validation_df)
+    )
+
+    sampled_df = (
+        validation_df.sample(
+            n=sample_size,
+            random_state=RANDOM_STATE
+        )
+        .reset_index(
+            drop=True
         )
     )
 
+    return sampled_df
 
-def summarize(
-    values
+
+def load_numpy_corpus():
+
+    embeddings = np.load(
+        EMBEDDINGS_PATH
+    )
+
+    metadata = pd.read_csv(
+        METADATA_PATH
+    )
+
+    if embeddings.ndim != 2:
+        raise ValueError(
+            "Corpus embeddings must "
+            "be a 2D matrix."
+        )
+
+    if len(embeddings) != len(
+        metadata
+    ):
+        raise ValueError(
+            "Embedding and metadata "
+            "row counts do not match."
+        )
+
+    return embeddings, metadata
+
+
+def validate_database_alignment(
+    metadata
 ):
 
-    return {
-        "mean_ms":
-            statistics.mean(values),
+    with Session(engine) as session:
 
-        "median_ms":
-            statistics.median(values),
+        rows = (
+            session.execute(
+                select(
+                    SupportTicket.id,
+                    SupportTicket.processed_instruction,
+                    SupportTicket.intent,
+                    SupportTicket.response,
+                )
+                .order_by(
+                    SupportTicket.id
+                )
+            )
+            .all()
+        )
 
-        "p95_ms":
-            percentile_95(values),
-    }
+    if len(rows) != len(metadata):
+        raise ValueError(
+            "Database row count does not "
+            "match metadata row count."
+        )
+
+    database_ids = []
+
+    for index, row in enumerate(rows):
+
+        metadata_row = metadata.iloc[
+            index
+        ]
+
+        if (
+            row.processed_instruction
+            != str(
+                metadata_row[
+                    "processed_instruction"
+                ]
+            )
+        ):
+            raise ValueError(
+                "Database/metadata alignment "
+                f"failed at row {index}."
+            )
+
+        if (
+            row.intent
+            != str(
+                metadata_row["intent"]
+            )
+        ):
+            raise ValueError(
+                "Intent alignment failed "
+                f"at row {index}."
+            )
+
+        if (
+            row.response
+            != str(
+                metadata_row["response"]
+            )
+        ):
+            raise ValueError(
+                "Response alignment failed "
+                f"at row {index}."
+            )
+
+        database_ids.append(
+            row.id
+        )
+
+    print(
+        "Database alignment validated."
+    )
+
+    return np.array(
+        database_ids
+    )
+
+
+def make_content_key(
+    instruction,
+    intent,
+):
+
+    return (
+        str(instruction),
+        str(intent),
+    )
+
+
+def numpy_search(
+    query_vector,
+    corpus_embeddings,
+    metadata,
+    database_ids,
+):
+
+    similarities = (
+        query_vector
+        @ corpus_embeddings.T
+    )
+
+    top_indices = (
+        np.argsort(
+            similarities
+        )[::-1][:TOP_K]
+    )
+
+    results = []
+
+    for index in top_indices:
+
+        results.append(
+            {
+                "id": int(
+                    database_ids[index]
+                ),
+                "content_key":
+                    make_content_key(
+                        metadata.iloc[index][
+                            "processed_instruction"
+                        ],
+                        metadata.iloc[index][
+                            "intent"
+                        ],
+                    ),
+                "similarity": float(
+                    similarities[index]
+                ),
+            }
+        )
+
+    return results
 
 
 def pgvector_search(
     query_vector,
-    use_hnsw=True
+    use_hnsw,
 ):
 
     distance = (
         SupportTicket.embedding
         .cosine_distance(
-            query_vector
+            query_vector.tolist()
         )
-        .label("distance")
+        .label(
+            "distance"
+        )
     )
 
     statement = (
@@ -84,11 +298,28 @@ def pgvector_search(
 
     with Session(engine) as session:
 
-        if not use_hnsw:
+        if use_hnsw:
 
             session.execute(
                 text(
-                    "SET LOCAL enable_indexscan = off"
+                    "SET LOCAL "
+                    "enable_indexscan = on"
+                )
+            )
+
+        else:
+
+            session.execute(
+                text(
+                    "SET LOCAL "
+                    "enable_indexscan = off"
+                )
+            )
+
+            session.execute(
+                text(
+                    "SET LOCAL "
+                    "enable_bitmapscan = off"
                 )
             )
 
@@ -99,147 +330,348 @@ def pgvector_search(
             .all()
         )
 
-    return rows
+    results = []
+
+    for row in rows:
+
+        results.append(
+            {
+                "id": row.id,
+                "content_key":
+                    make_content_key(
+                        row.processed_instruction,
+                        row.intent,
+                    ),
+                "similarity":
+                    1.0 - float(
+                        row.distance
+                    ),
+            }
+        )
+
+    return results
+
+
+def top1_id_agreement(
+    reference,
+    candidate,
+):
+
+    return (
+        reference[0]["id"]
+        == candidate[0]["id"]
+    )
+
+
+def top1_content_agreement(
+    reference,
+    candidate,
+):
+
+    return (
+        reference[0]["content_key"]
+        == candidate[0]["content_key"]
+    )
+
+
+def id_overlap(
+    reference,
+    candidate,
+):
+
+    reference_ids = {
+        result["id"]
+        for result in reference
+    }
+
+    candidate_ids = {
+        result["id"]
+        for result in candidate
+    }
+
+    return (
+        len(
+            reference_ids.intersection(
+                candidate_ids
+            )
+        )
+        / TOP_K
+    )
+
+
+def content_overlap(
+    reference,
+    candidate,
+):
+
+    reference_counter = Counter(
+        result["content_key"]
+        for result in reference
+    )
+
+    candidate_counter = Counter(
+        result["content_key"]
+        for result in candidate
+    )
+
+    common = (
+        reference_counter
+        & candidate_counter
+    )
+
+    return (
+        sum(
+            common.values()
+        )
+        / TOP_K
+    )
 
 
 def main():
+
+    print(
+        "Loading corpus..."
+    )
+
+    (
+        corpus_embeddings,
+        metadata,
+    ) = load_numpy_corpus()
+
+    database_ids = (
+        validate_database_alignment(
+            metadata
+        )
+    )
+
+    print(
+        "Loading validation queries..."
+    )
+
+    validation_df = (
+        load_validation_queries()
+    )
+
+    queries = (
+        validation_df[
+            "processed_instruction"
+        ]
+        .astype(str)
+        .tolist()
+    )
+
+    print(
+        f"Validation queries: {len(queries)}"
+    )
+
+    print(
+        "Generating query embeddings..."
+    )
 
     embedding_service = (
         EmbeddingService()
     )
 
-    numpy_retriever = (
-        SemanticRetriever()
+    query_embeddings = (
+        embedding_service.encode(
+            queries,
+            batch_size=64
+        )
     )
+
+    print(
+        "Query embeddings generated:",
+        query_embeddings.shape
+    )
+
+    print(
+        "Running warm-up..."
+    )
+
+    for query_vector in (
+        query_embeddings[
+            :WARMUP_QUERIES
+        ]
+    ):
+
+        numpy_search(
+            query_vector,
+            corpus_embeddings,
+            metadata,
+            database_ids,
+        )
+
+        pgvector_search(
+            query_vector,
+            use_hnsw=False,
+        )
+
+        pgvector_search(
+            query_vector,
+            use_hnsw=True,
+        )
 
     numpy_times = []
     exact_times = []
     hnsw_times = []
 
-    exact_top5_overlap = []
-    hnsw_top5_overlap = []
+    #
+    # NumPy vs pgvector exact
+    #
 
-    for query in TEST_QUERIES:
+    exact_id_top1 = []
+    exact_content_top1 = []
 
-        query_vector = (
-            embedding_service.encode(
-                [query]
-            )[0]
-            .tolist()
-        )
+    exact_id_top5 = []
+    exact_content_top5 = []
+
+    #
+    # pgvector exact vs HNSW
+    #
+
+    hnsw_id_top1 = []
+    hnsw_content_top1 = []
+
+    hnsw_id_top5 = []
+    hnsw_content_top5 = []
+
+    print(
+        "Running benchmark..."
+    )
+
+    for query_vector in query_embeddings:
+
+        #
+        # NumPy exact
+        #
+
+        start = time.perf_counter()
 
         numpy_results = (
-            numpy_retriever.search(
-                query,
-                top_k=TOP_K
+            numpy_search(
+                query_vector,
+                corpus_embeddings,
+                metadata,
+                database_ids,
             )
         )
 
-        numpy_reference = (
-            numpy_results[
-                "processed_instruction"
-            ].tolist()
-        )
-
-        for _ in range(REPEATS):
-
-            start = (
+        numpy_times.append(
+            (
                 time.perf_counter()
+                - start
             )
+            * 1000
+        )
 
-            numpy_retriever.search(
-                query,
-                top_k=TOP_K
+        #
+        # pgvector exact
+        #
+
+        start = time.perf_counter()
+
+        exact_results = (
+            pgvector_search(
+                query_vector,
+                use_hnsw=False,
             )
+        )
 
-            numpy_times.append(
-                (
-                    time.perf_counter()
-                    - start
-                )
-                * 1000
-            )
-
-            start = (
+        exact_times.append(
+            (
                 time.perf_counter()
+                - start
             )
+            * 1000
+        )
 
-            exact_results = (
-                pgvector_search(
-                    query_vector,
-                    use_hnsw=False
-                )
+        #
+        # pgvector HNSW
+        #
+
+        start = time.perf_counter()
+
+        hnsw_results = (
+            pgvector_search(
+                query_vector,
+                use_hnsw=True,
             )
+        )
 
-            exact_times.append(
-                (
-                    time.perf_counter()
-                    - start
-                )
-                * 1000
-            )
-
-            start = (
+        hnsw_times.append(
+            (
                 time.perf_counter()
+                - start
             )
-
-            hnsw_results = (
-                pgvector_search(
-                    query_vector,
-                    use_hnsw=True
-                )
-            )
-
-            hnsw_times.append(
-                (
-                    time.perf_counter()
-                    - start
-                )
-                * 1000
-            )
-
-        exact_names = [
-            row.processed_instruction
-            for row in exact_results
-        ]
-
-        hnsw_names = [
-            row.processed_instruction
-            for row in hnsw_results
-        ]
-
-        reference_set = set(
-            numpy_reference
+            * 1000
         )
 
-        exact_overlap = (
-            len(
-                reference_set.intersection(
-                    exact_names
-                )
+        #
+        # NumPy vs pgvector exact
+        #
+
+        exact_id_top1.append(
+            top1_id_agreement(
+                numpy_results,
+                exact_results,
             )
-            / TOP_K
         )
 
-        hnsw_overlap = (
-            len(
-                reference_set.intersection(
-                    hnsw_names
-                )
+        exact_content_top1.append(
+            top1_content_agreement(
+                numpy_results,
+                exact_results,
             )
-            / TOP_K
         )
 
-        exact_top5_overlap.append(
-            exact_overlap
+        exact_id_top5.append(
+            id_overlap(
+                numpy_results,
+                exact_results,
+            )
         )
 
-        hnsw_top5_overlap.append(
-            hnsw_overlap
+        exact_content_top5.append(
+            content_overlap(
+                numpy_results,
+                exact_results,
+            )
+        )
+
+        #
+        # pgvector exact vs HNSW
+        #
+
+        hnsw_id_top1.append(
+            top1_id_agreement(
+                exact_results,
+                hnsw_results,
+            )
+        )
+
+        hnsw_content_top1.append(
+            top1_content_agreement(
+                exact_results,
+                hnsw_results,
+            )
+        )
+
+        hnsw_id_top5.append(
+            id_overlap(
+                exact_results,
+                hnsw_results,
+            )
+        )
+
+        hnsw_content_top5.append(
+            content_overlap(
+                exact_results,
+                hnsw_results,
+            )
         )
 
     print(
-        "\nNUMPY"
+        "\nNUMPY EXACT"
     )
 
     print(
@@ -259,9 +691,30 @@ def main():
     )
 
     print(
-        "Top-5 agreement:",
-        statistics.mean(
-            exact_top5_overlap
+        "ID Top-1 agreement vs NumPy:",
+        np.mean(
+            exact_id_top1
+        )
+    )
+
+    print(
+        "Content Top-1 agreement vs NumPy:",
+        np.mean(
+            exact_content_top1
+        )
+    )
+
+    print(
+        "ID Top-5 overlap vs NumPy:",
+        np.mean(
+            exact_id_top5
+        )
+    )
+
+    print(
+        "Content Top-5 overlap vs NumPy:",
+        np.mean(
+            exact_content_top5
         )
     )
 
@@ -276,9 +729,30 @@ def main():
     )
 
     print(
-        "Top-5 agreement:",
-        statistics.mean(
-            hnsw_top5_overlap
+        "ID Top-1 agreement vs PG exact:",
+        np.mean(
+            hnsw_id_top1
+        )
+    )
+
+    print(
+        "Content Top-1 agreement vs PG exact:",
+        np.mean(
+            hnsw_content_top1
+        )
+    )
+
+    print(
+        "ID Recall@5 vs PG exact:",
+        np.mean(
+            hnsw_id_top5
+        )
+    )
+
+    print(
+        "Content Recall@5 vs PG exact:",
+        np.mean(
+            hnsw_content_top5
         )
     )
 
