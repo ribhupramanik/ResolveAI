@@ -1,7 +1,3 @@
-TOP_K = 5
-
-MIN_SIMILARITY = 0.50
-
 from dataclasses import dataclass
 
 from src.retrieval.pgvector_retriever import (
@@ -27,14 +23,14 @@ class ContextBuilder:
       min_similarity: float = DEFAULT_MIN_SIMILARITY,
   ):
 
-    self.retirever = ( retriever or PgVectorRetriever)
+    self.retriever = ( retriever if retriever is not None else PgVectorRetriever())
 
     self.top_k = top_k
     self.min_similarity = ( min_similarity )
 
-  def build( self, query: str ) -> RetrievedContext:
+  def build( self, query: str, ) -> RetrievedContext:
     results = (
-      self.retirever.search( query, top_k=self.top_k )
+      self.retriever.search( query, top_k=self.top_k, )
     )
 
     if results.empty:
