@@ -22,28 +22,28 @@ class GroqGenerator:
 
         self.client = Groq(api_key=api_key, timeout=30.0)
 
-        def generate(self, prompt: PromptPayload) -> GeneratedResponse:
-            completion = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": prompt.system_prompt,
-                    },
-                    {"role": "user", "content": prompt.user_prompt},
-                ],
-                temparature=0.2,
-                max_completion_tokens=512,
-                include_reasoning=False,
-            )
+    def generate(self, prompt: PromptPayload) -> GeneratedResponse:
+        completion = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": prompt.system_prompt,
+                },
+                {"role": "user", "content": prompt.user_prompt},
+            ],
+            temperature=0.2,
+            max_completion_tokens=512,
+            include_reasoning=False,
+        )
 
-            content = completion.choices[0].message.content
+        content = completion.choices[0].message.content
 
-            if not content:
-                raise RuntimeError("Groq returned an empty response.")
+        if not content:
+            raise RuntimeError("Groq returned an empty response.")
 
-            return GeneratedResponse(
-                text=content.strip(),
-                model=self.model,
-                provider="groq",
-            )
+        return GeneratedResponse(
+            text=content.strip(),
+            model=self.model,
+            provider="groq",
+        )
