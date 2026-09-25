@@ -32,7 +32,7 @@ class GroqGenerator:
                 },
                 {"role": "user", "content": prompt.user_prompt},
             ],
-            temperature=0.2,
+            temperature=0.0,
             max_completion_tokens=512,
             include_reasoning=False,
         )
