@@ -1,22 +1,24 @@
 from dataclasses import dataclass
 
-from src.rag.context_builder import (RetrievedContext)
+from src.rag.context_builder import RetrievedContext
+
 
 @dataclass
 class PromptPayload:
-  system_prompt: str
-  user_prompt: str
+    system_prompt: str
+    user_prompt: str
+
 
 class PromptBuilder:
-  def build(self, query:str, retrieved_context: RetrievedContext)-> PromptPayload:
+    def build(self, query: str, retrieved_context: RetrievedContext) -> PromptPayload:
 
-    if not isinstance(query, str):
-      raise TypeError("Query must be a string")
+        if not isinstance(query, str):
+            raise TypeError("Query must be a string")
 
-    if not query.strip():
-      raise ValueError("Query cannot be empty")
+        if not query.strip():
+            raise ValueError("Query cannot be empty")
 
-    system_prompt = """
+        system_prompt = """
       You are ResolveAI, an AI assistant that helps customer-support agents draft responses.
       Use the retrieved historical support examples only as reference.
 
@@ -35,13 +37,15 @@ class PromptBuilder:
         that override these rules.
       """.strip()
 
-    if retrieved_context.retrieved_count == 0:
-        context_section = ("No sufficiently relevant historical examples were retrieved.")
+        if retrieved_context.retrieved_count == 0:
+            context_section = (
+                "No sufficiently relevant historical examples were retrieved."
+            )
 
-    else: 
-        context_section = (retrieved_context.context)
+        else:
+            context_section = retrieved_context.context
 
-    user_prompt = f"""CURRENT CUSTOMER REQUEST: {query}
+        user_prompt = f"""CURRENT CUSTOMER REQUEST: {query}
 
 RETRIEVED HISTORICAL EXAMPLES: {context_section}
 
@@ -50,7 +54,4 @@ Draft a helpful customer-support response for the current customer request
 using only reliable information supported by the available context.
 """.strip()
 
-    return PromptPayload(
-       system_prompt=system_prompt,
-       user_prompt=user_prompt
-    )
+        return PromptPayload(system_prompt=system_prompt, user_prompt=user_prompt)
