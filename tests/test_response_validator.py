@@ -3,7 +3,6 @@ import pytest
 from src.rag.context_builder import (
     RetrievedContext,
 )
-
 from src.rag.response_validator import (
     ResponseValidator,
 )
@@ -61,10 +60,7 @@ def test_placeholder_is_detected(
     context,
 ):
 
-    response = (
-        "Please visit {{Website URL}} "
-        "for assistance."
-    )
+    response = "Please visit {{Website URL}} for assistance."
 
     result = validator.validate(
         response,
@@ -74,11 +70,7 @@ def test_placeholder_is_detected(
 
     assert not result.is_valid
 
-    assert any(
-        issue.code
-        == "unresolved_placeholder"
-        for issue in result.issues
-    )
+    assert any(issue.code == "unresolved_placeholder" for issue in result.issues)
 
 
 def test_action_claim_is_detected(
@@ -86,10 +78,7 @@ def test_action_claim_is_detected(
     context,
 ):
 
-    response = (
-        "Please provide your order number. "
-        "I can look into the details for you."
-    )
+    response = "Please provide your order number. I can look into the details for you."
 
     result = validator.validate(
         response,
@@ -99,11 +88,7 @@ def test_action_claim_is_detected(
 
     assert not result.is_valid
 
-    assert any(
-        issue.code
-        == "unsupported_action_claim"
-        for issue in result.issues
-    )
+    assert any(issue.code == "unsupported_action_claim" for issue in result.issues)
 
 
 def test_future_action_is_detected(
@@ -111,10 +96,7 @@ def test_future_action_is_detected(
     context,
 ):
 
-    response = (
-        "I'll follow up once I have "
-        "more information."
-    )
+    response = "I'll follow up once I have more information."
 
     result = validator.validate(
         response,
@@ -124,11 +106,7 @@ def test_future_action_is_detected(
 
     assert not result.is_valid
 
-    assert any(
-        issue.code
-        == "unsupported_action_claim"
-        for issue in result.issues
-    )
+    assert any(issue.code == "unsupported_action_claim" for issue in result.issues)
 
 
 def test_unsupported_numeric_claim_is_detected(
@@ -136,10 +114,7 @@ def test_unsupported_numeric_claim_is_detected(
     context,
 ):
 
-    response = (
-        "Refunds normally arrive within "
-        "5-10 business days."
-    )
+    response = "Refunds normally arrive within 5-10 business days."
 
     result = validator.validate(
         response,
@@ -149,11 +124,7 @@ def test_unsupported_numeric_claim_is_detected(
 
     assert not result.is_valid
 
-    assert any(
-        issue.code
-        == "unsupported_numeric_claim"
-        for issue in result.issues
-    )
+    assert any(issue.code == "unsupported_numeric_claim" for issue in result.issues)
 
 
 def test_supported_numeric_claim_is_allowed(
@@ -161,20 +132,14 @@ def test_supported_numeric_claim_is_allowed(
 ):
 
     context = RetrievedContext(
-        context=(
-            "Historical resolution: "
-            "Refund processing may take "
-            "7 business days."
-        ),
+        context=("Historical resolution: Refund processing may take 7 business days."),
         retrieved_count=1,
         max_similarity=0.80,
         min_similarity=0.80,
     )
 
     response = (
-        "The available information states "
-        "that processing may take "
-        "7 business days."
+        "The available information states that processing may take 7 business days."
     )
 
     result = validator.validate(
@@ -191,14 +156,13 @@ def test_empty_response_raises_error(
     context,
 ):
 
-    with pytest.raises(
-        ValueError
-    ):
+    with pytest.raises(ValueError):
         validator.validate(
             "   ",
             "where is my refund",
             context,
         )
+
 
 @pytest.mark.parametrize(
     "response",
@@ -208,7 +172,6 @@ def test_empty_response_raises_error(
         "I'll check the status for you.",
         "I've checked your account.",
         "We can look into this for you.",
-
         # New cases
         "I can help you check the status.",
         "I'll be able to look into the situation for you.",
@@ -229,8 +192,4 @@ def test_action_contractions_are_detected(
 
     assert not result.is_valid
 
-    assert any(
-        issue.code
-        == "unsupported_action_claim"
-        for issue in result.issues
-    )
+    assert any(issue.code == "unsupported_action_claim" for issue in result.issues)

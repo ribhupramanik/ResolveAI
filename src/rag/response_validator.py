@@ -24,94 +24,85 @@ class ValidationResult:
 
 
 class ResponseValidator:
-
-    PLACEHOLDER_PATTERN = re.compile(
-        r"\{\{[^{}]+\}\}"
-    )
+    PLACEHOLDER_PATTERN = re.compile(r"\{\{[^{}]+\}\}")
 
     ACTION_PATTERNS = [  # noqa: RUF012
+        # I/we can check...
+        # I/we will investigate...
+        # I'll check...
+        re.compile(
+            r"\b(?:"
+            r"(?:i|we)\s+(?:can\s+|will\s+)?"
+            r"|"
+            r"(?:i|we)['’]ll\s+"
+            r")"
+            r"(?:check|review|investigate|process|"
+            r"update|change|cancel|contact|"
+            r"escalate|verify)\b",
+            re.IGNORECASE,
+        ),
+        # I can help you check...
+        # We can help investigate...
+        re.compile(
+            r"\b(?:i|we)\s+"
+            r"(?:can\s+|will\s+)?"
+            r"help(?:\s+you)?\s+"
+            r"(?:check|review|investigate|process|"
+            r"update|change|cancel|contact|"
+            r"escalate|verify)\b",
+            re.IGNORECASE,
+        ),
+        # I can look into...
+        # I'll look into...
+        re.compile(
+            r"\b(?:"
+            r"(?:i|we)\s+(?:can\s+|will\s+)?"
+            r"|"
+            r"(?:i|we)['’]ll\s+"
+            r")"
+            r"look\s+into\b",
+            re.IGNORECASE,
+        ),
+        # I'll be able to look into...
+        # We will be able to investigate...
+        re.compile(
+            r"\b(?:"
+            r"(?:i|we)\s+will\s+"
+            r"|"
+            r"(?:i|we)['’]ll\s+"
+            r")"
+            r"be\s+able\s+to\s+"
+            r"(?:look\s+into|check|review|investigate|"
+            r"process|update|change|cancel|contact|"
+            r"escalate|verify)\b",
+            re.IGNORECASE,
+        ),
+        # I will follow up...
+        # I'll follow up...
+        re.compile(
+            r"\b(?:"
+            r"(?:i|we)\s+(?:will\s+)?"
+            r"|"
+            r"(?:i|we)['’]ll\s+"
+            r")"
+            r"follow\s+up\b",
+            re.IGNORECASE,
+        ),
+        # I have checked...
+        # I've checked...
+        re.compile(
+            r"\b(?:"
+            r"(?:i|we)\s+(?:have\s+)?"
+            r"|"
+            r"(?:i|we)['’]ve\s+"
+            r")"
+            r"(?:checked|reviewed|investigated|"
+            r"processed|updated|changed|cancelled|"
+            r"canceled|contacted|escalated|verified)\b",
+            re.IGNORECASE,
+        ),
+    ]
 
-    # I/we can check...
-    # I/we will investigate...
-    # I'll check...
-    re.compile(
-        r"\b(?:"
-        r"(?:i|we)\s+(?:can\s+|will\s+)?"
-        r"|"
-        r"(?:i|we)['’]ll\s+"
-        r")"
-        r"(?:check|review|investigate|process|"
-        r"update|change|cancel|contact|"
-        r"escalate|verify)\b",
-        re.IGNORECASE,
-    ),
-
-    # I can help you check...
-    # We can help investigate...
-    re.compile(
-        r"\b(?:i|we)\s+"
-        r"(?:can\s+|will\s+)?"
-        r"help(?:\s+you)?\s+"
-        r"(?:check|review|investigate|process|"
-        r"update|change|cancel|contact|"
-        r"escalate|verify)\b",
-        re.IGNORECASE,
-    ),
-
-    # I can look into...
-    # I'll look into...
-    re.compile(
-        r"\b(?:"
-        r"(?:i|we)\s+(?:can\s+|will\s+)?"
-        r"|"
-        r"(?:i|we)['’]ll\s+"
-        r")"
-        r"look\s+into\b",
-        re.IGNORECASE,
-    ),
-
-    # I'll be able to look into...
-    # We will be able to investigate...
-    re.compile(
-        r"\b(?:"
-        r"(?:i|we)\s+will\s+"
-        r"|"
-        r"(?:i|we)['’]ll\s+"
-        r")"
-        r"be\s+able\s+to\s+"
-        r"(?:look\s+into|check|review|investigate|"
-        r"process|update|change|cancel|contact|"
-        r"escalate|verify)\b",
-        re.IGNORECASE,
-    ),
-
-    # I will follow up...
-    # I'll follow up...
-    re.compile(
-        r"\b(?:"
-        r"(?:i|we)\s+(?:will\s+)?"
-        r"|"
-        r"(?:i|we)['’]ll\s+"
-        r")"
-        r"follow\s+up\b",
-        re.IGNORECASE,
-    ),
-
-    # I have checked...
-    # I've checked...
-    re.compile(
-        r"\b(?:"
-        r"(?:i|we)\s+(?:have\s+)?"
-        r"|"
-        r"(?:i|we)['’]ve\s+"
-        r")"
-        r"(?:checked|reviewed|investigated|"
-        r"processed|updated|changed|cancelled|"
-        r"canceled|contacted|escalated|verified)\b",
-        re.IGNORECASE,
-    ),
-]
-    
     NUMERIC_CLAIM_PATTERN = re.compile(
         r"""
         (?:
@@ -166,18 +157,12 @@ class ResponseValidator:
             response_text,
             str,
         ):
-            raise TypeError(
-                "Response text must be a string."
-            )
+            raise TypeError("Response text must be a string.")
 
         if not response_text.strip():
-            raise ValueError(
-                "Response text cannot be empty."
-            )
+            raise ValueError("Response text cannot be empty.")
 
-        issues: list[
-            ValidationIssue
-        ] = []
+        issues: list[ValidationIssue] = []
 
         self._check_placeholders(
             response_text,
@@ -207,24 +192,12 @@ class ResponseValidator:
         issues: list[ValidationIssue],
     ) -> None:
 
-        for match in (
-            self.PLACEHOLDER_PATTERN
-            .finditer(
-                response_text
-            )
-        ):
-
+        for match in self.PLACEHOLDER_PATTERN.finditer(response_text):
             issues.append(
                 ValidationIssue(
                     code="unresolved_placeholder",
-                    message=(
-                        "Response contains an "
-                        "unresolved template "
-                        "placeholder."
-                    ),
-                    matched_text=match.group(
-                        0
-                    ),
+                    message=("Response contains an unresolved template placeholder."),
+                    matched_text=match.group(0),
                 )
             )
 
@@ -236,44 +209,26 @@ class ResponseValidator:
 
         seen_matches = set()
 
-        for pattern in (
-            self.ACTION_PATTERNS
-        ):
+        for pattern in self.ACTION_PATTERNS:
+            for match in pattern.finditer(response_text):
+                matched_text = match.group(0)
 
-            for match in pattern.finditer(
-                response_text
-            ):
-
-                matched_text = (
-                    match.group(0)
-                )
-
-                normalized = (
-                    matched_text
-                    .lower()
-                    .strip()
-                )
+                normalized = matched_text.lower().strip()
 
                 if normalized in seen_matches:
                     continue
 
-                seen_matches.add(
-                    normalized
-                )
+                seen_matches.add(normalized)
 
                 issues.append(
                     ValidationIssue(
-                        code=(
-                            "unsupported_action_claim"
-                        ),
+                        code=("unsupported_action_claim"),
                         message=(
                             "Response implies that "
                             "ResolveAI can perform "
                             "an external action."
                         ),
-                        matched_text=(
-                            matched_text
-                        ),
+                        matched_text=(matched_text),
                     )
                 )
 
@@ -285,47 +240,26 @@ class ResponseValidator:
         issues: list[ValidationIssue],
     ) -> None:
 
-        evidence = " ".join(
+        evidence = " ".join(  # noqa: FLY002
             [
                 query,
                 retrieved_context.context,
             ]
         )
 
-        normalized_evidence = (
-            self._normalize_text(
-                evidence
-            )
-        )
+        normalized_evidence = self._normalize_text(evidence)
 
-        for match in (
-            self.NUMERIC_CLAIM_PATTERN
-            .finditer(
-                response_text
-            )
-        ):
+        for match in self.NUMERIC_CLAIM_PATTERN.finditer(response_text):
+            claim = match.group(0)
 
-            claim = match.group(
-                0
-            )
+            normalized_claim = self._normalize_text(claim)
 
-            normalized_claim = (
-                self._normalize_text(
-                    claim
-                )
-            )
-
-            if (
-                normalized_claim
-                in normalized_evidence
-            ):
+            if normalized_claim in normalized_evidence:
                 continue
 
             issues.append(
                 ValidationIssue(
-                    code=(
-                        "unsupported_numeric_claim"
-                    ),
+                    code=("unsupported_numeric_claim"),
                     message=(
                         "Response contains a "
                         "numerical claim that is "
@@ -343,15 +277,12 @@ class ResponseValidator:
 
         text = text.lower()
 
-        text = (
-            text.replace(
-                "–",
-                "-",
-            )
-            .replace(
-                "—",
-                "-",
-            )
+        text = text.replace(
+            "–",
+            "-",
+        ).replace(
+            "—",
+            "-",
         )
 
         text = re.sub(
