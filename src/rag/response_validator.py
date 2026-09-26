@@ -29,67 +29,89 @@ class ResponseValidator:
         r"\{\{[^{}]+\}\}"
     )
 
-    ACTION_PATTERNS = [
+    ACTION_PATTERNS = [  # noqa: RUF012
 
-        # I/we can check...
-        # I/we will investigate...
-        # I'll check...
-        # We'll investigate...
-        re.compile(
-            r"\b(?:"
-            r"(?:i|we)\s+(?:can\s+|will\s+)?"
-            r"|"
-            r"(?:i|we)['’]ll\s+"
-            r")"
-            r"(?:check|review|investigate|process|"
-            r"update|change|cancel|contact|"
-            r"escalate|verify)\b",
-            re.IGNORECASE,
-        ),
+    # I/we can check...
+    # I/we will investigate...
+    # I'll check...
+    re.compile(
+        r"\b(?:"
+        r"(?:i|we)\s+(?:can\s+|will\s+)?"
+        r"|"
+        r"(?:i|we)['’]ll\s+"
+        r")"
+        r"(?:check|review|investigate|process|"
+        r"update|change|cancel|contact|"
+        r"escalate|verify)\b",
+        re.IGNORECASE,
+    ),
 
-        # I can look into...
-        # We will look into...
-        # I'll look into...
-        re.compile(
-            r"\b(?:"
-            r"(?:i|we)\s+(?:can\s+|will\s+)?"
-            r"|"
-            r"(?:i|we)['’]ll\s+"
-            r")"
-            r"look\s+into\b",
-            re.IGNORECASE,
-        ),
+    # I can help you check...
+    # We can help investigate...
+    re.compile(
+        r"\b(?:i|we)\s+"
+        r"(?:can\s+|will\s+)?"
+        r"help(?:\s+you)?\s+"
+        r"(?:check|review|investigate|process|"
+        r"update|change|cancel|contact|"
+        r"escalate|verify)\b",
+        re.IGNORECASE,
+    ),
 
-        # I will follow up...
-        # We'll follow up...
-        # I'll follow up...
-        re.compile(
-            r"\b(?:"
-            r"(?:i|we)\s+(?:will\s+)?"
-            r"|"
-            r"(?:i|we)['’]ll\s+"
-            r")"
-            r"follow\s+up\b",
-            re.IGNORECASE,
-        ),
+    # I can look into...
+    # I'll look into...
+    re.compile(
+        r"\b(?:"
+        r"(?:i|we)\s+(?:can\s+|will\s+)?"
+        r"|"
+        r"(?:i|we)['’]ll\s+"
+        r")"
+        r"look\s+into\b",
+        re.IGNORECASE,
+    ),
 
-        # I have checked...
-        # We reviewed...
-        # I've checked...
-        # We've processed...
-        re.compile(
-            r"\b(?:"
-            r"(?:i|we)\s+(?:have\s+)?"
-            r"|"
-            r"(?:i|we)['’]ve\s+"
-            r")"
-            r"(?:checked|reviewed|investigated|"
-            r"processed|updated|changed|cancelled|"
-            r"canceled|contacted|escalated|verified)\b",
-            re.IGNORECASE,
-        ),
-    ]
+    # I'll be able to look into...
+    # We will be able to investigate...
+    re.compile(
+        r"\b(?:"
+        r"(?:i|we)\s+will\s+"
+        r"|"
+        r"(?:i|we)['’]ll\s+"
+        r")"
+        r"be\s+able\s+to\s+"
+        r"(?:look\s+into|check|review|investigate|"
+        r"process|update|change|cancel|contact|"
+        r"escalate|verify)\b",
+        re.IGNORECASE,
+    ),
 
+    # I will follow up...
+    # I'll follow up...
+    re.compile(
+        r"\b(?:"
+        r"(?:i|we)\s+(?:will\s+)?"
+        r"|"
+        r"(?:i|we)['’]ll\s+"
+        r")"
+        r"follow\s+up\b",
+        re.IGNORECASE,
+    ),
+
+    # I have checked...
+    # I've checked...
+    re.compile(
+        r"\b(?:"
+        r"(?:i|we)\s+(?:have\s+)?"
+        r"|"
+        r"(?:i|we)['’]ve\s+"
+        r")"
+        r"(?:checked|reviewed|investigated|"
+        r"processed|updated|changed|cancelled|"
+        r"canceled|contacted|escalated|verified)\b",
+        re.IGNORECASE,
+    ),
+]
+    
     NUMERIC_CLAIM_PATTERN = re.compile(
         r"""
         (?:

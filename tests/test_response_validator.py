@@ -208,6 +208,11 @@ def test_empty_response_raises_error(
         "I'll check the status for you.",
         "I've checked your account.",
         "We can look into this for you.",
+
+        # New cases
+        "I can help you check the status.",
+        "I'll be able to look into the situation for you.",
+        "We can help you investigate the issue.",
     ],
 )
 def test_action_contractions_are_detected(
