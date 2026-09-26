@@ -30,29 +30,59 @@ class ResponseValidator:
     )
 
     ACTION_PATTERNS = [
+
+        # I/we can check...
+        # I/we will investigate...
+        # I'll check...
+        # We'll investigate...
         re.compile(
-            r"\b(?:i|we)\s+"
-            r"(?:can\s+|will\s+|['’]ll\s+)?"
+            r"\b(?:"
+            r"(?:i|we)\s+(?:can\s+|will\s+)?"
+            r"|"
+            r"(?:i|we)['’]ll\s+"
+            r")"
             r"(?:check|review|investigate|process|"
             r"update|change|cancel|contact|"
             r"escalate|verify)\b",
             re.IGNORECASE,
         ),
+
+        # I can look into...
+        # We will look into...
+        # I'll look into...
         re.compile(
-            r"\b(?:i|we)\s+"
-            r"(?:can\s+|will\s+|['’]ll\s+)?"
+            r"\b(?:"
+            r"(?:i|we)\s+(?:can\s+|will\s+)?"
+            r"|"
+            r"(?:i|we)['’]ll\s+"
+            r")"
             r"look\s+into\b",
             re.IGNORECASE,
         ),
+
+        # I will follow up...
+        # We'll follow up...
+        # I'll follow up...
         re.compile(
-            r"\b(?:i|we)\s+"
-            r"(?:will\s+|['’]ll\s+)?"
+            r"\b(?:"
+            r"(?:i|we)\s+(?:will\s+)?"
+            r"|"
+            r"(?:i|we)['’]ll\s+"
+            r")"
             r"follow\s+up\b",
             re.IGNORECASE,
         ),
+
+        # I have checked...
+        # We reviewed...
+        # I've checked...
+        # We've processed...
         re.compile(
-            r"\b(?:i|we)\s+"
-            r"(?:have\s+|['’]ve\s+)?"
+            r"\b(?:"
+            r"(?:i|we)\s+(?:have\s+)?"
+            r"|"
+            r"(?:i|we)['’]ve\s+"
+            r")"
             r"(?:checked|reviewed|investigated|"
             r"processed|updated|changed|cancelled|"
             r"canceled|contacted|escalated|verified)\b",
