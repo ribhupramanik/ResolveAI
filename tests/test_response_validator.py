@@ -176,6 +176,12 @@ def test_empty_response_raises_error(
         "I can help you check the status.",
         "I'll be able to look into the situation for you.",
         "We can help you investigate the issue.",
+        "I've forwarded your request to our team.",
+        "I can look up the current order status.",
+        "I'll look up the delivery estimate.",
+        "I can connect you to a human agent.",
+        "We'll transfer you to support.",
+        "I can provide you with the latest status.",
     ],
 )
 def test_action_contractions_are_detected(

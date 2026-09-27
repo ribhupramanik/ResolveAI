@@ -98,9 +98,66 @@ class ResponseValidator:
             r")"
             r"(?:checked|reviewed|investigated|"
             r"processed|updated|changed|cancelled|"
-            r"canceled|contacted|escalated|verified)\b",
+            r"canceled|contacted|escalated|verified|"
+            r"forwarded|sent|submitted|routed|"
+            r"assigned|transferred)\b",
             re.IGNORECASE,
         ),
+        # I've forwarded your request...
+        # We have sent this to the team...
+        # I've transferred your case...
+        re.compile(
+            r"\b(?:"
+            r"(?:i|we)\s+have\s+"
+            r"|"
+            r"(?:i|we)['’]ve\s+"
+            r")"
+            r"(?:forwarded|sent|submitted|routed|"
+            r"assigned|transferred)\b",
+            re.IGNORECASE,
+        ),
+        # I can look up...
+        # We'll look up...
+        # I'll look up...
+        re.compile(
+            r"\b(?:"
+            r"(?:i|we)\s+(?:can\s+|will\s+)?"
+            r"|"
+            r"(?:i|we)['’]ll\s+"
+            r")"
+            r"look\s+up\b",
+            re.IGNORECASE,
+        ),
+        # I can connect you...
+        # We'll transfer you...
+        # I'll route you...
+        re.compile(
+            r"\b(?:"
+            r"(?:i|we)\s+(?:can\s+|will\s+)?"
+            r"|"
+            r"(?:i|we)['’]ll\s+"
+            r")"
+            r"(?:connect|transfer|route)\s+you\b",
+            re.IGNORECASE,
+        ),
+        # I can provide you with the latest status...
+        # We will give you an updated estimate...
+        re.compile(
+            r"\b(?:"
+            r"(?:i|we)\s+(?:can\s+|will\s+)?"
+            r"|"
+            r"(?:i|we)['’]ll\s+"
+            r")"
+            r"(?:provide|give|send)\s+"
+            r"(?:you\s+)?"
+            r"(?:with\s+)?"
+            r"(?:the\s+)?"
+            r"(?:latest\s+|updated\s+|current\s+)?"
+            r"(?:status|estimate|tracking\s+status|"
+            r"refund\s+status|order\s+status)\b",
+            re.IGNORECASE,
+        ),
+
     ]
 
     NUMERIC_CLAIM_PATTERN = re.compile(
