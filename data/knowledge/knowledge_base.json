@@ -1,10 +1,54 @@
 [
   {
     "topic": "payment_methods",
-    "content": "No verified payment-method information is currently available."
+    "content": "No verified information about supported payment methods is currently available."
   },
   {
     "topic": "refund_timeline",
-    "content": "No verified refund timeline is currently available."
+    "content": "No verified refund processing or refund arrival timeline is currently available."
+  },
+  {
+    "topic": "refund_status",
+    "content": "No live refund-status integration is currently available. ResolveAI cannot verify the current status of a customer's refund."
+  },
+  {
+    "topic": "order_tracking",
+    "content": "No live order-tracking integration is currently available. ResolveAI cannot provide the current location or delivery status of an order."
+  },
+  {
+    "topic": "password_recovery",
+    "content": "No verified password-recovery procedure is currently available. ResolveAI must not invent password-reset steps, URLs, emails, or account-recovery workflows."
+  },
+  {
+    "topic": "account_deletion",
+    "content": "No verified account-deletion procedure or data-deletion policy is currently available."
+  },
+  {
+    "topic": "shipping_address_change",
+    "content": "No verified procedure for changing a shipping or delivery address is currently available."
+  },
+  {
+    "topic": "delivery_timeline",
+    "content": "No verified delivery-time estimate or delivery-period policy is currently available."
+  },
+  {
+    "topic": "invoice_access",
+    "content": "No verified procedure for downloading, viewing, or requesting an invoice is currently available."
+  },
+  {
+    "topic": "order_cancellation",
+    "content": "No verified order-cancellation procedure, eligibility rule, or cancellation policy is currently available."
+  },
+  {
+    "topic": "payment_issue",
+    "content": "No verified company-specific payment troubleshooting procedure is currently available. ResolveAI may ask the customer to describe the payment problem but must not claim to inspect or modify the transaction."
+  },
+  {
+    "topic": "human_support",
+    "content": "ResolveAI cannot currently transfer, route, forward, connect, or escalate a conversation to a human support agent because no support-routing integration is available."
+  },
+  {
+    "topic": "account_creation",
+    "content": "No verified account-registration procedure is currently available. ResolveAI must not invent signup pages, required fields, verification steps, URLs, or mobile-app workflows."
   }
 ]

@@ -1,53 +1,48 @@
 query,expected_intent,response,retrieved_count,attempts,used_fallback,validation_issue_count,validation_issues,provider,model
 my refund still hasn't reached my bank account,track_refund,"I’m sorry to hear that your refund hasn’t appeared in your bank account yet.  
-Could you please share the following details so I can help you locate the status of the refund?
+To help you check the status, could you please provide:
 
-- Order or transaction number  
-- Date of the original purchase  
-- Payment method used (e.g., credit card, bank transfer)  
+- The order or transaction number  
+- The date you requested the refund  
+- The payment method you used (e.g., credit card, bank transfer)
 
-Once I have this information, I can guide you on the next steps or direct you to the appropriate team. If you prefer, you can also reach out to our customer support line for immediate assistance.",5,2,False,1,unsupported_action_claim,groq,openai/gpt-oss-20b
+Once I have that information, I can guide you on the next steps. If you prefer, you can also reach out to our customer‑support team directly for further assistance.",5,2,False,1,unsupported_action_claim,groq,openai/gpt-oss-20b
 where is my order right now,track_order,"I’m happy to help you locate your order. Could you please share your order number or tracking number? Once I have that, I can provide you with the most up‑to‑date status.",5,1,False,0,,groq,openai/gpt-oss-20b
-I forgot my account password,recover_password,"Sure! To reset your password, please follow these steps:
+I forgot my account password,recover_password,"I’m sorry you’re having trouble logging in.  
+Here’s a quick way to reset your password:
 
 1. Go to the login page of the service.  
-2. Click the **“Forgot Password”** link (usually located near the login fields).  
+2. Click the **Forgot Password** (or similar) link.  
 3. Enter the email address you used to create the account.  
 4. Check your inbox (and spam/junk folder) for an email with a reset link.  
 5. Click the link and follow the on‑screen instructions to set a new password.
 
-If you don’t receive the email or run into any issues, let me know and I can help you troubleshoot further.",5,1,False,0,,groq,openai/gpt-oss-20b
-I want to permanently delete my account,delete_account,"I’m sorry you’re looking to close your account. To help with that, I’ll need to confirm a few details first. Could you please provide the email address or username associated with the account you’d like to delete? Once I have that information, I’ll forward your request to the appropriate team for review.",5,1,False,0,,groq,openai/gpt-oss-20b
+If you don’t receive the email or run into any other issues, let me know and I’ll help you troubleshoot further.",5,1,False,0,,groq,openai/gpt-oss-20b
+I want to permanently delete my account,delete_account,"I’m happy to help you with that. To proceed with permanently deleting your account, I’ll need a bit of information to verify your identity and locate the correct account. Could you please provide:
+
+1. The email address or username associated with the account you’d like to delete.
+2. Any additional details that might help confirm it’s your account (for example, the last four digits of the phone number on file).
+
+Once I have that information, I can walk you through the steps to delete the account. If you prefer, you can also log in to the website, go to your account settings, and look for a “Delete account” or “Close account” option. Let me know how you’d like to proceed.",5,2,False,1,unsupported_action_claim,groq,openai/gpt-oss-20b
 what payment methods can I use,check_payment_methods,"I’m sorry, but I don’t have that information available. Please contact our customer support team for details on the payment methods you can use.",5,1,False,0,,groq,openai/gpt-oss-20b
-I need to change where my order is being shipped,change_shipping_address,"Sure, I can help you with that. To change the shipping address for your order, you’ll need to:
+I need to change where my order is being shipped,change_shipping_address,"Sure, I can help you with that.  
+Could you please share:
 
-1. Log in to your account on our website.  
-2. Go to the “My Account” or “Orders” section.  
-3. Select the order you want to modify.  
-4. Look for an option to edit the shipping address and enter the new details.  
-5. Save the changes.
+1. Your order number (or the email address used for the order)  
+2. The new shipping address you’d like the order sent to  
 
-If you’re unable to find that option or need further assistance, could you please provide the order number and the new shipping address? That way I can give you more specific guidance. If you prefer, you can also reach out to our customer support team for direct help.",5,2,False,1,unsupported_action_claim,groq,openai/gpt-oss-20b
+Once I have that information, I can guide you through the steps to update the address or make the change for you.",5,1,False,0,,groq,openai/gpt-oss-20b
 how long will delivery take,delivery_period,"I’m happy to help you find out when your delivery is expected. Could you please share your order number or tracking number? Once I have that, I can give you the most accurate estimate.",5,2,False,1,unsupported_action_claim,groq,openai/gpt-oss-20b
-can you send me my invoice,get_invoice,"I’d be happy to help you locate your invoice. Could you please let me know the invoice number or the order reference associated with it? Once I have that information, I can guide you on how to access or download it.",5,1,False,0,,groq,openai/gpt-oss-20b
+can you send me my invoice,get_invoice,"I’d be happy to help you get the invoice. Could you please let me know the invoice number (or the order ID) you’re looking for? Once I have that, I can guide you through the steps to view or download it from your account.",5,1,False,0,,groq,openai/gpt-oss-20b
 I want to cancel the order I just placed,cancel_order,"Sure, I can help you with that. Could you please share the order number (or any other details that identify the order) so I can guide you through the cancellation process?",5,1,False,0,,groq,openai/gpt-oss-20b
 there is a problem with my payment,payment_issue,"I’m sorry to hear you’re having trouble with your payment. Could you please share a bit more detail about what’s happening—such as any error messages, the type of payment you’re using, or when the issue occurred? That will help me understand the situation better and find the right solution for you.",5,1,False,0,,groq,openai/gpt-oss-20b
-I need to speak with a human agent,contact_human_agent,I understand you’d like to speak with a human agent. I can help you get connected—please let me know your preferred contact method or any additional details so I can assist you further.,5,1,False,0,,groq,openai/gpt-oss-20b
-how do I create a new account,create_account,"Sure! Here’s a quick overview of how you can set up a new account:
+I need to speak with a human agent,contact_human_agent,I understand you’d like to speak with a human agent. I can help you get connected—please let me know your preferred contact method or any additional details that might help us route you to the right person.,5,1,False,0,,groq,openai/gpt-oss-20b
+how do I create a new account,create_account,"Sure! To create a new account, you can usually follow these steps:
 
-1. **Visit the website or open the mobile app**  
-   - On the homepage, look for a button that says “Sign Up,” “Create Account,” or “Register.”  
-   - If you’re using the app, tap the “Create Account” option on the login screen.
+1. **Visit the website or app** – Open the official site or download the mobile app for the service you’re interested in.  
+2. **Find the sign‑up link** – Look for a button or link that says “Sign Up,” “Create Account,” or “Register.”  
+3. **Enter your details** – Provide the information requested, such as your name, email address, and a password.  
+4. **Verify your email** – Most services will send a confirmation link to the email you provided. Click that link to activate your account.  
+5. **Complete any additional steps** – Some platforms may ask for extra details (e.g., phone number, profile picture) or require you to agree to terms of service.
 
-2. **Enter your details**  
-   - You’ll be prompted to provide basic information such as your name, email address, and a password.  
-   - Some services also ask for a username or phone number; fill in whatever is required.
-
-3. **Verify your email (or phone)**  
-   - After submitting the form, you’ll usually receive a confirmation link in your inbox (or a code on your phone).  
-   - Click the link or enter the code to verify your account.
-
-4. **Complete any additional steps**  
-   - Depending on the service, you might need to set up security questions, add a profile picture, or agree to terms of service.
-
-If you run into any trouble during any of these steps, let me know which part is giving you a hard time and I’ll help you troubleshoot!",5,1,False,0,,groq,openai/gpt-oss-20b
+If you run into any trouble or need help with a specific platform, let me know which service you’re trying to sign up for, and I can give more tailored guidance.",5,1,False,0,,groq,openai/gpt-oss-20b
