@@ -12,7 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 DEFAULT_KNOWLEDGE_PATH = PROJECT_ROOT / "data" / "knowledge" / "knowledge_base.json"
 
-DEFAULT_TOP_K = 2
+DEFAULT_TOP_K = 1
 DEFAULT_MIN_SIMILARITY = 0.35
 
 
@@ -21,6 +21,7 @@ class KnowledgeMatch:
     topic: str
     content: str
     similarity: float
+    matched_phrase: str
 
 
 @dataclass
@@ -46,17 +47,19 @@ class KnowledgeRetriever:
 
         self._items = self._load_knowledge()
 
+        self._retrieval_entries = (
+            self._build_retrieval_entries()
+        )
+
         self._retrieval_texts = [
-            self._build_retrieval_text(
-                item["topic"],
-                item["aliases"],
-                item["content"],
-            )
-            for item in self._items
+            entry["text"]
+            for entry in self._retrieval_entries
         ]
 
         self._embeddings = np.asarray(
-            self.embedding_service.encode(self._retrieval_texts),
+            self.embedding_service.encode(
+                self._retrieval_texts
+            ),
             dtype=np.float32,
         )
 
@@ -113,37 +116,75 @@ class KnowledgeRetriever:
 
         return items
 
-    @staticmethod
-    def _build_retrieval_text(
-        topic: str,
-        aliases: list[str],
-        content: str,
-    ) -> str:
 
-        readable_topic = topic.replace(
-            "_",
-            " ",
-        )
+    def _build_retrieval_entries(
+        self,
+    ) -> list[dict]:
 
-        alias_text = ", ".join(aliases)
+        entries = []
 
-        if alias_text:
-            return (
-                f"Topic: {readable_topic}. "
-                f"Related phrases: {alias_text}. "
-                f"Verified knowledge: {content}"
+        for item_index, item in enumerate(
+            self._items
+        ):
+
+            readable_topic = (
+                item["topic"]
+                .replace(
+                    "_",
+                    " ",
+                )
             )
 
-        return f"Topic: {readable_topic}. Verified knowledge: {content}"
+            phrases = [
+                readable_topic,
+                *item["aliases"],
+            ]
 
-    def _validate_embeddings(self) -> None:
+            seen = set()
+
+            for phrase in phrases:
+
+                normalized = (
+                    phrase
+                    .strip()
+                    .lower()
+                )
+
+                if normalized in seen:
+                    continue
+
+                seen.add(
+                    normalized
+                )
+
+                entries.append(
+                    {
+                        "item_index":
+                            item_index,
+                        "text":
+                            phrase.strip(),
+                    }
+                )
+
+        return entries
+
+    def _validate_embeddings(
+        self,
+    ) -> None:
 
         if self._embeddings.ndim != 2:
-            raise ValueError("Knowledge embeddings must be a 2D matrix.")
+            raise ValueError(
+                "Knowledge embeddings must "
+                "be a 2D matrix."
+            )
 
-        if len(self._embeddings) != len(self._items):
-            raise ValueError("Knowledge item and embedding counts do not match.")
-
+        if len(self._embeddings) != len(
+            self._retrieval_entries
+        ):
+            raise ValueError(
+                "Retrieval entry and embedding "
+                "counts do not match."
+            )
     def search(
         self,
         query: str,
@@ -176,27 +217,93 @@ class KnowledgeRetriever:
             dtype=np.float32,
         )
 
-        similarities = self._embeddings @ query_embedding
+        similarities = (
+            self._embeddings
+            @ query_embedding
+        )
 
-        ranked_indices = np.argsort(similarities)[::-1]
+        best_match_by_item = {}
+
+        for entry_index, similarity in enumerate(
+            similarities
+        ):
+
+            entry = self._retrieval_entries[
+                entry_index
+            ]
+
+            item_index = entry[
+                "item_index"
+            ]
+
+            similarity = float(
+                similarity
+            )
+
+            current_best = (
+                best_match_by_item.get(
+                    item_index
+                )
+            )
+
+            if (
+                current_best is None
+                or similarity
+                > current_best["similarity"]
+            ):
+
+                best_match_by_item[
+                    item_index
+                ] = {
+                    "similarity":
+                        similarity,
+                    "matched_phrase":
+                        entry["text"],
+                }
+
+
+        ranked_items = sorted(
+            best_match_by_item.items(),
+            key=lambda pair:
+                pair[1]["similarity"],
+            reverse=True,
+        )
+
 
         matches = []
 
-        for index in ranked_indices[:top_k]:
-            similarity = float(similarities[index])
+        for item_index, match_data in (
+            ranked_items
+        ):
+
+            similarity = (
+                match_data[
+                    "similarity"
+                ]
+            )
 
             if similarity < min_similarity:
                 continue
 
-            item = self._items[index]
+            item = self._items[
+                item_index
+            ]
 
             matches.append(
                 KnowledgeMatch(
                     topic=item["topic"],
                     content=item["content"],
                     similarity=similarity,
+                    matched_phrase=(
+                        match_data[
+                            "matched_phrase"
+                        ]
+                    ),
                 )
             )
+
+            if len(matches) >= top_k:
+                break
 
         return matches
 

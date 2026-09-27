@@ -27,6 +27,26 @@ def main():
 
         print(f"QUERY: {query}")
 
+        matches = retriever.search(
+            query
+        )
+
+        for match in matches:
+            print(
+                "MATCH:",
+                match.topic,
+            )
+
+            print(
+                "MATCHED PHRASE:",
+                match.matched_phrase,
+            )
+
+            print(
+                "SIMILARITY:",
+                match.similarity,
+            )
+
         result = retriever.build(query)
 
         print(
