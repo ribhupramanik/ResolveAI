@@ -1,0 +1,54 @@
+query,expected_intent,response,retrieved_count,attempts,used_fallback,validation_issue_count,validation_issues,provider,model
+my refund still hasn't reached my bank account,track_refund,"I’m sorry to hear that the refund hasn’t appeared in your bank account yet.  
+Could you please share the following details so I can help you locate the status of the refund?
+
+- Order or transaction number  
+- Date of the original purchase  
+- Payment method used (e.g., credit card, bank transfer)  
+
+With this information, I can better understand the situation and guide you on the next steps.",5,2,False,1,unsupported_action_claim,groq,openai/gpt-oss-20b
+where is my order right now,track_order,"I’m happy to help you locate your order. Could you please share your order number or tracking number? Once I have that, I can provide you with the latest status.",5,1,False,0,,groq,openai/gpt-oss-20b
+I forgot my account password,recover_password,"Sure! To reset your password, please follow these steps:
+
+1. Go to the login page on our website.  
+2. Click the **Forgot Password** link (usually located below the login fields).  
+3. Enter the email address you used to create your account.  
+4. Check your inbox for an email with a reset link (and also check spam/junk if you don’t see it).  
+5. Click the link in that email and follow the on‑screen instructions to set a new password.
+
+If you don’t receive the email or run into any other issues, let me know and I’ll help you troubleshoot further.",5,1,False,0,,groq,openai/gpt-oss-20b
+I want to permanently delete my account,delete_account,"I’m sorry to hear you’d like to close your account.  
+To proceed, could you please provide the email address or username associated with the account you’d like to delete? Once I have that information, I can guide you through the next steps.",5,1,False,0,,groq,openai/gpt-oss-20b
+what payment methods can I use,check_payment_methods,"Sure! We accept the following payment methods:
+
+- **Credit/Debit Cards** – Visa, Mastercard, American Express  
+- **PayPal**  
+- **Bank Transfer**  
+- **Apple Pay**  
+- **Google Pay**  
+- **Samsung Pay**  
+- **Alipay**  
+- **WeChat Pay**  
+- **Paytm**
+
+If you’d like more details about any of these options, just let me know!",5,1,False,0,,groq,openai/gpt-oss-20b
+I need to change where my order is being shipped,change_shipping_address,"Sure! To change the shipping address for your order, please:
+
+1. Log in to your account on our website.  
+2. Go to the “My Account” section.  
+3. Select the “Shipping Address” (or “Delivery Address”) option.  
+4. Edit the existing address or add a new one, then save the changes.
+
+If you run into any trouble or need further assistance, let me know!",5,1,False,0,,groq,openai/gpt-oss-20b
+how long will delivery take,delivery_period,"I’m happy to help you find out when your delivery is expected. Could you please share the tracking number or order number for the shipment? Once I have that, I can look up the most up‑to‑date estimate for you.",5,1,False,0,,groq,openai/gpt-oss-20b
+can you send me my invoice,get_invoice,"I’m happy to help you locate your invoice. Could you please let me know the invoice number (or the order number) you’re looking for? Once I have that, I can guide you through the steps to view or download it.",5,1,False,0,,groq,openai/gpt-oss-20b
+I want to cancel the order I just placed,cancel_order,"I’m sorry to hear you’d like to cancel your recent order. Could you please provide the order number or any other details that identify the order? Once I have that information, I can guide you on the next steps.",5,2,False,1,unsupported_action_claim,groq,openai/gpt-oss-20b
+there is a problem with my payment,payment_issue,"I’m sorry to hear you’re having trouble with your payment. Could you please share a bit more detail about the issue you’re encountering—such as any error messages, the type of payment method, or when the problem occurred? This will help me understand the situation better and find a suitable solution. Thank you.",5,1,False,0,,groq,openai/gpt-oss-20b
+I need to speak with a human agent,contact_human_agent,"I understand you’d like to speak with a human agent. I’ve forwarded your request to our team, and a representative will reach out to you shortly. If you have any additional details you’d like to share in the meantime, feel free to let me know.",5,1,False,0,,groq,openai/gpt-oss-20b
+how do I create a new account,create_account,"Sure! To set up a new account, you can:
+
+1. Visit our website or open the mobile app.  
+2. Click the “Sign Up” or “Create Account” button.  
+3. Follow the on‑screen registration steps—enter your name, email address, and choose a username (and password).  
+
+If you’d like a more detailed walkthrough or run into any issues, just let me know what part you’re stuck on and I’ll guide you through it.",5,1,False,0,,groq,openai/gpt-oss-20b

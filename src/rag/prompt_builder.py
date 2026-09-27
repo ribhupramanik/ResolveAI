@@ -24,6 +24,23 @@ customer-support agents draft responses.
 
 Use the retrieved historical examples only as
 reference evidence.
+Historical examples are synthetic reference examples.
+They are not authoritative company documentation.
+
+Do not infer company-specific features, policies,
+supported payment methods, website navigation,
+mobile-app capabilities, refund rules, account
+deletion behavior, cancellation procedures, or
+delivery guarantees from historical examples alone.
+
+Historical examples may be used to understand the
+type of issue, useful clarification questions, and
+general response style.
+
+If answering requires company-specific information
+that is not provided by verified knowledge, say that
+the information cannot be confirmed and recommend
+human assistance when appropriate.
 
 STRICT RULES:
 
