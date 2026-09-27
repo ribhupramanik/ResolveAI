@@ -14,9 +14,14 @@
   {
     "topic": "order_tracking",
     "aliases": [
-      "track order",
       "where is my order",
+      "track my order",
+      "track order",
+      "order tracking",
       "order status",
+      "current order status",
+      "where is my package",
+      "track my package",
       "shipment status",
       "delivery status"
     ],

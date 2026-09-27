@@ -90,37 +90,23 @@ class KnowledgeRetriever:
             content = item.get("content")
 
             if not isinstance(topic, str) or not topic.strip():
-                raise ValueError(
-                    f"Knowledge item {index} has an invalid topic."
-                )
+                raise ValueError(f"Knowledge item {index} has an invalid topic.")
 
             if not isinstance(aliases, list):
                 raise ValueError(  # noqa: TRY004
                     f"Knowledge item {index} aliases must be a list."
                 )
 
-            if not all(
-                isinstance(alias, str)
-                and alias.strip()
-                for alias in aliases
-            ):
-                raise ValueError(
-                    f"Knowledge item {index} "
-                    f"contains an invalid alias."
-                )
+            if not all(isinstance(alias, str) and alias.strip() for alias in aliases):
+                raise ValueError(f"Knowledge item {index} contains an invalid alias.")
 
             if not isinstance(content, str) or not content.strip():
-                raise ValueError(
-                    f"Knowledge item {index} has invalid content."
-                )
+                raise ValueError(f"Knowledge item {index} has invalid content.")
 
             items.append(
                 {
                     "topic": topic.strip(),
-                    "aliases": [
-                        alias.strip()
-                        for alias in aliases
-                    ],
+                    "aliases": [alias.strip() for alias in aliases],
                     "content": content.strip(),
                 }
             )
@@ -139,9 +125,7 @@ class KnowledgeRetriever:
             " ",
         )
 
-        alias_text = ", ".join(
-            aliases
-        )
+        alias_text = ", ".join(aliases)
 
         if alias_text:
             return (
@@ -150,10 +134,7 @@ class KnowledgeRetriever:
                 f"Verified knowledge: {content}"
             )
 
-        return (
-            f"Topic: {readable_topic}. "
-            f"Verified knowledge: {content}"
-        )
+        return f"Topic: {readable_topic}. Verified knowledge: {content}"
 
     def _validate_embeddings(self) -> None:
 
