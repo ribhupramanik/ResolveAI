@@ -167,12 +167,12 @@ def test_empty_response_raises_error(
 @pytest.mark.parametrize(
     "response",
     [
+        # Existing cases
         "I'll follow up once I have more information.",
         "We'll investigate this for you.",
         "I'll check the status for you.",
         "I've checked your account.",
         "We can look into this for you.",
-        # New cases
         "I can help you check the status.",
         "I'll be able to look into the situation for you.",
         "We can help you investigate the issue.",
@@ -182,9 +182,25 @@ def test_empty_response_raises_error(
         "I can connect you to a human agent.",
         "We'll transfer you to support.",
         "I can provide you with the latest status.",
+        # New cases found during RAG evaluation
+        "I'll forward your request to our support team.",
+        "I will forward your request to the appropriate team.",
+        "We'll forward this to customer support.",
+        "We will send your request to the relevant department.",
+        "I'll send this to our support team.",
+        "I can provide you with the current order status.",
+        "I can provide you with the latest refund status.",
+        "I can give you an accurate delivery estimate.",
+        "I can give you the current status of your shipment.",
+        "I can help you get connected to a human agent.",
+        "I can help you connect with customer support.",
+        "I can help you locate the status of your refund.",
+        "I can help you locate your order.",
+        "I'll route your request to the appropriate team.",
+        "We can route this to customer support.",
     ],
 )
-def test_action_contractions_are_detected(
+def test_unsupported_action_claims_are_detected(
     validator,
     context,
     response,

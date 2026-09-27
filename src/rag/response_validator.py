@@ -141,23 +141,67 @@ class ResponseValidator:
             re.IGNORECASE,
         ),
         # I can provide you with the latest status...
-        # We will give you an updated estimate...
+        # I can give you an accurate delivery estimate...
         re.compile(
             r"\b(?:"
             r"(?:i|we)\s+(?:can\s+|will\s+)?"
             r"|"
             r"(?:i|we)['’]ll\s+"
             r")"
-            r"(?:provide|give|send)\s+"
+            r"(?:provide|give)\s+"
             r"(?:you\s+)?"
             r"(?:with\s+)?"
-            r"(?:the\s+)?"
-            r"(?:latest\s+|updated\s+|current\s+)?"
-            r"(?:status|estimate|tracking\s+status|"
-            r"refund\s+status|order\s+status)\b",
+            r"(?:the\s+|an?\s+)?"
+            r"(?:"
+            r"latest\s+|"
+            r"updated\s+|"
+            r"current\s+|"
+            r"accurate\s+|"
+            r"up[- ]to[- ]date\s+|"
+            r"most\s+up[- ]to[- ]date\s+"
+            r")?"
+            r"(?:(?:delivery|tracking|refund|order|shipment)\s+)?"
+            r"(?:status|estimate)\b",
             re.IGNORECASE,
         ),
-
+        # I'll forward your request...
+        # We will send your request...
+        # We'll route this...
+        re.compile(
+            r"\b(?:"
+            r"(?:i|we)\s+(?:can\s+|will\s+)?"
+            r"|"
+            r"(?:i|we)['’]ll\s+"
+            r")"
+            r"(?:forward|send|route|transfer|assign|submit)\s+"
+            r"(?:"
+            r"your\s+(?:request|case|issue)"
+            r"|"
+            r"this"
+            r"|"
+            r"the\s+(?:request|case|issue)"
+            r")\b",
+            re.IGNORECASE,
+        ),
+        # I can help you get connected to...
+        # I can help you connect with...
+        re.compile(
+            r"\b(?:i|we)\s+"
+            r"(?:can\s+|will\s+)?"
+            r"help(?:\s+you)?\s+"
+            r"(?:get\s+connected|connect)\s+"
+            r"(?:to|with)\b",
+            re.IGNORECASE,
+        ),
+        # I can help you locate the refund status...
+        # I can help you locate your order...
+        re.compile(
+            r"\b(?:i|we)\s+"
+            r"(?:can\s+|will\s+)?"
+            r"help(?:\s+you)?\s+"
+            r"locate\b",
+            re.IGNORECASE,
+        ),
     ]
 
     NUMERIC_CLAIM_PATTERN = re.compile(
