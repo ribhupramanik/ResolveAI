@@ -1,0 +1,13 @@
+query,expected_intent
+my refund still hasn't reached my bank account,track_refund
+where is my order right now,track_order
+I forgot my account password,recover_password
+I want to permanently delete my account,delete_account
+what payment methods can I use,check_payment_methods
+I need to change where my order is being shipped,change_shipping_address
+how long will delivery take,delivery_period
+can you send me my invoice,get_invoice
+I want to cancel the order I just placed,cancel_order
+there is a problem with my payment,payment_issue
+I need to speak with a human agent,contact_human_agent
+how do I create a new account,create_account
