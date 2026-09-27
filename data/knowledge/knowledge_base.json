@@ -13,6 +13,13 @@
   },
   {
     "topic": "order_tracking",
+    "aliases": [
+      "track order",
+      "where is my order",
+      "order status",
+      "shipment status",
+      "delivery status"
+    ],
     "content": "No live order-tracking integration is currently available. ResolveAI cannot provide the current location or delivery status of an order."
   },
   {
@@ -45,10 +52,26 @@
   },
   {
     "topic": "human_support",
+    "aliases": [
+      "human agent",
+      "customer support",
+      "support representative",
+      "speak to someone",
+      "talk to an agent"
+    ],
     "content": "ResolveAI cannot currently transfer, route, forward, connect, or escalate a conversation to a human support agent because no support-routing integration is available."
   },
   {
     "topic": "account_creation",
+    "aliases": [
+      "create account",
+      "new account",
+      "sign up",
+      "signup",
+      "register",
+      "registration",
+      "open an account"
+    ],
     "content": "No verified account-registration procedure is currently available. ResolveAI must not invent signup pages, required fields, verification steps, URLs, or mobile-app workflows."
   }
 ]
