@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from src.rag.context_builder import ContextBuilder
 from src.rag.generator import Generator
+from src.rag.knowledge_retriever import KnowledgeRetriever
 from src.rag.prompt_builder import PromptBuilder, PromptPayload
 from src.rag.response_validator import ResponseValidator, ValidationIssue
 
@@ -18,6 +19,10 @@ class RAGResult:
     model: str | None
 
     retrieved_count: int
+
+    verified_knowledge_count: int
+    verified_knowledge_topics: list[str]
+
     attempts: int
     used_fallback: bool
 
@@ -28,11 +33,12 @@ class ResolveAIPipeline:
     def __init__(
         self,
         generator: Generator,
-        context_builder= None,
-        prompt_builder= None,
-        validator= None,
+        context_builder: ContextBuilder | None = None,
+        knowledge_retriever: KnowledgeRetriever | None = None,
+        prompt_builder: PromptBuilder | None = None,
+        validator: ResponseValidator | None = None,
     ):
-        self.generator= generator
+        self.generator = generator
 
         self.context_builder = (
             context_builder if context_builder is not None else ContextBuilder()
@@ -44,6 +50,12 @@ class ResolveAIPipeline:
 
         self.validator = validator if validator is not None else ResponseValidator()
 
+        self.knowledge_retriever = (
+            knowledge_retriever
+            if knowledge_retriever is not None
+            else KnowledgeRetriever()
+        )
+
     def run(self, query: str) -> RAGResult:
         if not isinstance(query, str):
             raise TypeError("Query must be a string")
@@ -52,6 +64,8 @@ class ResolveAIPipeline:
             raise ValueError("Query cannot be empty")
 
         retrieved_context = self.context_builder.build(query)
+
+        verified_knowledge = self.knowledge_retriever.build(query)
 
         prompt = self.prompt_builder.build(query, retrieved_context)
 
@@ -69,6 +83,8 @@ class ResolveAIPipeline:
                 provider=first_response.provider,
                 model=first_response.model,
                 retrieved_count=(retrieved_context.retrieved_count),
+                verified_knowledge_count=(verified_knowledge.retrieved_count),
+                verified_knowledge_topics=(verified_knowledge.topics),
                 attempts=1,
                 used_fallback=False,
                 validation_issues=[],
@@ -90,6 +106,8 @@ class ResolveAIPipeline:
                 provider=second_response.provider,
                 model=second_response.model,
                 retrieved_count=(retrieved_context.retrieved_count),
+                verified_knowledge_count=(verified_knowledge.retrieved_count),
+                verified_knowledge_topics=(verified_knowledge.topics),
                 attempts=2,
                 used_fallback=False,
                 validation_issues=(first_validation.issues),
@@ -104,6 +122,8 @@ class ResolveAIPipeline:
             provider=second_response.provider,
             model=second_response.model,
             retrieved_count=(retrieved_context.retrieved_count),
+            verified_knowledge_count=(verified_knowledge.retrieved_count),
+            verified_knowledge_topics=(verified_knowledge.topics),
             attempts=2,
             used_fallback=True,
             validation_issues=all_issues,
