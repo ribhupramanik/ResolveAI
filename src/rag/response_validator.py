@@ -249,18 +249,24 @@ class ResponseValidator:
     ]
 
     SUPPORT_ROUTE_PATTERNS = [  # noqa: RUF012
-        # contact/reach out to/speak with support team
+
+        # contact/reach out/speak/call/email/try contacting
+        # customer support, support team, department, etc.
         re.compile(
             r"\b(?:"
             r"contact"
+            r"|contacting"
+            r"|try\s+contacting"
             r"|reach\s+out\s+to"
             r"|speak\s+(?:to|with)"
             r"|call"
             r"|email"
             r")\s+"
-            r"(?:the\s+|our\s+|a\s+)?"
+            r"(?:the\s+|their\s+|our\s+|a\s+)?"
+            r"(?:company['’]s\s+)?"
             r"(?:"
             r"customer[- ]support"
+            r"|customer[- ]service"
             r"|support\s+team"
             r"|support\s+department"
             r"|support\s+representative"
@@ -268,13 +274,64 @@ class ResponseValidator:
             r")\b",
             re.IGNORECASE,
         ),
-        # visit/use/contact the help center
+
+        # check/visit/use an alleged help resource,
+        # website, channel, or help center
         re.compile(
             r"\b(?:"
-            r"visit|use|contact"
+            r"check"
+            r"|visit"
+            r"|use"
+            r"|try"
             r")\s+"
-            r"(?:the\s+|our\s+)?"
-            r"help\s+center\b",
+            r"(?:any\s+|the\s+|their\s+|our\s+)?"
+            r"(?:company['’]s\s+)?"
+            r"(?:official\s+)?"
+            r"(?:"
+            r"website"
+            r"|channels?"
+            r"|help\s+(?:center|resources?)"
+            r"|support\s+(?:page|portal|website)"
+            r")\b",
+            re.IGNORECASE,
+        ),
+
+        re.compile(
+            r"\b(?:"
+            r"try\s+contacting"
+            r"|contact"
+            r"|contacting"
+            r"|reach\s+out\s+to"
+            r")\s+"
+            r"(?:the\s+|a\s+)?"
+            r"company\s+"
+            r"(?:through|via)\s+"
+            r"(?:their\s+|the\s+)?"
+            r"(?:official\s+)?"
+            r"(?:"
+            r"website"
+            r"|channels?"
+            r"|help\s+(?:center|resources?)"
+            r"|support\s+(?:page|portal|website)"
+            r")\b",
+            re.IGNORECASE,
+        ),
+
+        # recommendations involving an alleged phone number
+        re.compile(
+            r"\b(?:"
+            r"call"
+            r"|contact"
+            r"|use"
+            r"|through"
+            r")\s+"
+            r"(?:the\s+|their\s+|a\s+)?"
+            r"(?:"
+            r"customer[- ]support\s+"
+            r"|customer[- ]service\s+"
+            r"|support\s+"
+            r")?"
+            r"phone\s+number\b",
             re.IGNORECASE,
         ),
     ]

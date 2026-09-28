@@ -372,3 +372,78 @@ def test_unsupported_third_party_claims_are_detected(
         == "unsupported_third_party_claim"
         for issue in result.issues
     )
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        (
+            "Please contact the company's "
+            "customer support directly."
+        ),
+        (
+            "You may want to contact their "
+            "customer support directly."
+        ),
+        (
+            "You may want to check the company's "
+            "official website."
+        ),
+        (
+            "You may want to check any official "
+            "help resources."
+        ),
+        (
+            "Try contacting the company through "
+            "their official website."
+        ),
+        (
+            "Please use their customer-support "
+            "phone number."
+        ),
+        (
+            "Contact their customer support "
+            "through their official channels."
+        ),
+    ],
+)
+def test_unverified_support_routes_from_rag_eval_are_detected(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+    response,
+):
+    result = validator.validate(
+        response,
+        "I need help",
+        verified_knowledge,
+        system_capabilities,
+    )
+
+    assert not result.is_valid
+
+    assert any(
+        issue.code
+        == "unsupported_support_route_claim"
+        for issue in result.issues
+    )
+
+def test_negative_support_route_statement_is_allowed(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+
+    response = (
+        "No verified customer-support route "
+        "is currently available."
+    )
+
+    result = validator.validate(
+        response,
+        "I need help",
+        verified_knowledge,
+        system_capabilities,
+    )
+
+    assert result.is_valid
