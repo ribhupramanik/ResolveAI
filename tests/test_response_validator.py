@@ -405,6 +405,26 @@ def test_unsupported_third_party_claims_are_detected(
             "Contact their customer support "
             "through their official channels."
         ),
+        (
+            "You may want to check any available "
+            "customer support resources that the "
+            "company provides."
+        ),
+        (
+            "You may want to check any official "
+            "resources or contact the company directly "
+            "through their official channels."
+        ),
+        (
+            "You can check any official communication "
+            "or look for a link in your account portal."
+        ),
+        (
+            "Please contact the company's "
+            "customer-support team directly through "
+            "their official website or "
+            "customer-support phone number."
+        ),
     ],
 )
 def test_unverified_support_routes_from_rag_eval_are_detected(

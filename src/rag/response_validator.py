@@ -250,58 +250,91 @@ class ResponseValidator:
 
     SUPPORT_ROUTE_PATTERNS = [  # noqa: RUF012
 
-        # contact/reach out/speak/call/email/try contacting
-        # customer support, support team, department, etc.
+        # Recommend contacting an unverified support
+        # person, team, company, or channel.
         re.compile(
             r"\b(?:"
             r"contact"
             r"|contacting"
             r"|try\s+contacting"
-            r"|reach\s+out\s+to"
-            r"|speak\s+(?:to|with)"
             r"|call"
             r"|email"
+            r"|reach\s+out(?:\s+directly)?\s+to"
+            r"|speak\s+(?:to|with)"
             r")\s+"
             r"(?:the\s+|their\s+|our\s+|a\s+)?"
             r"(?:company['’]s\s+)?"
             r"(?:"
-            r"customer[- ]support"
-            r"|customer[- ]service"
+            r"customer[-‐-‒–— ]support"
+            r"|customer[-‐-‒–— ]service"
             r"|support\s+team"
             r"|support\s+department"
             r"|support\s+representative"
             r"|support\s+agent"
+            r"|company"
             r")\b",
             re.IGNORECASE,
         ),
 
-        # check/visit/use an alleged help resource,
-        # website, channel, or help center
+        # Recommend checking/visiting/using an
+        # unverified website, portal, resource, channel,
+        # help center, or communication.
         re.compile(
             r"\b(?:"
             r"check"
             r"|visit"
             r"|use"
+            r"|open"
+            r"|find"
+            r"|look\s+for"
             r"|try"
             r")\s+"
-            r"(?:any\s+|the\s+|their\s+|our\s+)?"
+            r"(?:any\s+|the\s+|their\s+|our\s+|a\s+)?"
+            r"(?:available\s+)?"
             r"(?:company['’]s\s+)?"
             r"(?:official\s+)?"
             r"(?:"
             r"website"
+            r"|resources?"
             r"|channels?"
-            r"|help\s+(?:center|resources?)"
-            r"|support\s+(?:page|portal|website)"
+            r"|help\s+(?:center|resources?|page|portal)"
+            r"|support\s+(?:resources?|page|portal|website|channels?)"
+            r"|customer[-‐-‒–— ]support\s+resources?"
+            r"|customer[-‐-‒–— ]service\s+resources?"
+            r"|account\s+portal"
+            r"|official\s+communication"
+            r"|communications?"
             r")\b",
             re.IGNORECASE,
         ),
 
+        # Recommend using a supposed phone number.
         re.compile(
             r"\b(?:"
-            r"try\s+contacting"
+            r"call"
             r"|contact"
+            r"|use"
+            r"|through"
+            r"|via"
+            r")\s+"
+            r"(?:the\s+|their\s+|our\s+|a\s+)?"
+            r"(?:"
+            r"customer[-‐-‒–— ]support\s+"
+            r"|customer[-‐-‒–— ]service\s+"
+            r"|support\s+"
+            r")?"
+            r"phone\s+number\b",
+            re.IGNORECASE,
+        ),
+
+        # Contact a company through/via an alleged
+        # website, channel, portal, or help resource.
+        re.compile(
+            r"\b(?:"
+            r"contact"
             r"|contacting"
-            r"|reach\s+out\s+to"
+            r"|try\s+contacting"
+            r"|reach\s+out(?:\s+directly)?\s+to"
             r")\s+"
             r"(?:the\s+|a\s+)?"
             r"company\s+"
@@ -311,31 +344,12 @@ class ResponseValidator:
             r"(?:"
             r"website"
             r"|channels?"
-            r"|help\s+(?:center|resources?)"
+            r"|help\s+(?:center|resources?|portal)"
             r"|support\s+(?:page|portal|website)"
             r")\b",
             re.IGNORECASE,
         ),
-
-        # recommendations involving an alleged phone number
-        re.compile(
-            r"\b(?:"
-            r"call"
-            r"|contact"
-            r"|use"
-            r"|through"
-            r")\s+"
-            r"(?:the\s+|their\s+|a\s+)?"
-            r"(?:"
-            r"customer[- ]support\s+"
-            r"|customer[- ]service\s+"
-            r"|support\s+"
-            r")?"
-            r"phone\s+number\b",
-            re.IGNORECASE,
-        ),
     ]
-
     THIRD_PARTY_PATTERNS = [  # noqa: RUF012
         # contact merchant/bank/payment provider/courier
         re.compile(
