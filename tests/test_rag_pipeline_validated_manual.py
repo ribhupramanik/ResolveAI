@@ -32,6 +32,10 @@ def main():
 
     print("VERIFIED KNOWLEDGE TOPICS:", result.verified_knowledge_topics)
 
+    print("SYSTEM CAPABILITY COUNT:",result.system_capability_count,)
+
+    print("SYSTEM CAPABILITIES:",result.system_capabilities)
+
     print("PROVIDER:", result.provider)
 
     print("MODEL:", result.model)

@@ -19,7 +19,6 @@ from src.rag.prompt_builder import (
 from src.rag.response_validator import (
     ResponseValidator,
 )
-
 from src.rag.system_capabilities import (
     SystemCapabilitiesContext,
 )
@@ -68,8 +67,8 @@ class FakeKnowledgeRetriever:
             max_similarity=0.90,
         )
 
-class FakeSystemCapabilitiesProvider:
 
+class FakeSystemCapabilitiesProvider:
     def build(
         self,
     ):
@@ -138,7 +137,7 @@ def create_pipeline(
         generator=SequenceGenerator(responses),
         context_builder=FakeContextBuilder(),
         knowledge_retriever=FakeKnowledgeRetriever(),
-        system_capabilities_provider= FakeSystemCapabilitiesProvider(),
+        system_capabilities_provider=FakeSystemCapabilitiesProvider(),
         prompt_builder=FakePromptBuilder(),
         validator=ResponseValidator(),
     )
@@ -159,9 +158,9 @@ def test_valid_first_response():
 
     assert result.verified_knowledge_topics == ["refund_status"]
 
-    assert (result.system_capability_count == 1)
+    assert result.system_capability_count == 1
 
-    assert ( result.system_capabilities == ["human_support_routing"])
+    assert result.system_capabilities == ["human_support_routing"]
 
     assert "order number" in result.text
 
