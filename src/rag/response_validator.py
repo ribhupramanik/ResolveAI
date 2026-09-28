@@ -248,6 +248,81 @@ class ResponseValidator:
         ),
     ]
 
+    SUPPORT_ROUTE_PATTERNS = [  # noqa: RUF012
+        # contact/reach out to/speak with support team
+        re.compile(
+            r"\b(?:"
+            r"contact"
+            r"|reach\s+out\s+to"
+            r"|speak\s+(?:to|with)"
+            r"|call"
+            r"|email"
+            r")\s+"
+            r"(?:the\s+|our\s+|a\s+)?"
+            r"(?:"
+            r"customer[- ]support"
+            r"|support\s+team"
+            r"|support\s+department"
+            r"|support\s+representative"
+            r"|support\s+agent"
+            r")\b",
+            re.IGNORECASE,
+        ),
+        # visit/use/contact the help center
+        re.compile(
+            r"\b(?:"
+            r"visit|use|contact"
+            r")\s+"
+            r"(?:the\s+|our\s+)?"
+            r"help\s+center\b",
+            re.IGNORECASE,
+        ),
+    ]
+
+    THIRD_PARTY_PATTERNS = [  # noqa: RUF012
+        # contact merchant/bank/payment provider/courier
+        re.compile(
+            r"\b(?:contact|call|email)\s+"
+            r"(?:the\s+|your\s+|a\s+)?"
+            r"(?:"
+            r"merchant"
+            r"|bank"
+            r"|payment\s+provider"
+            r"|courier"
+            r"|carrier"
+            r")\b",
+            re.IGNORECASE,
+        ),
+        # reach out directly to the merchant/bank/etc.
+        re.compile(
+            r"\breach\s+out"
+            r"(?:\s+directly)?"
+            r"\s+to\s+"
+            r"(?:the\s+|your\s+|a\s+)?"
+            r"(?:"
+            r"merchant"
+            r"|bank"
+            r"|payment\s+provider"
+            r"|courier"
+            r"|carrier"
+            r")\b",
+            re.IGNORECASE,
+        ),
+        # check with your bank / merchant
+        re.compile(
+            r"\bcheck\s+with\s+"
+            r"(?:the\s+|your\s+|a\s+)?"
+            r"(?:"
+            r"merchant"
+            r"|bank"
+            r"|payment\s+provider"
+            r"|courier"
+            r"|carrier"
+            r")\b",
+            re.IGNORECASE,
+        ),
+    ]
+
     NUMERIC_CLAIM_PATTERN = re.compile(
         r"""
         (?:
@@ -320,6 +395,16 @@ class ResponseValidator:
             issues,
         )
 
+        self._check_support_route_claims(
+            response_text,
+            issues,
+        )
+
+        self._check_third_party_claims(
+            response_text,
+            issues,
+        )
+
         self._check_numeric_claims(
             response_text,
             query,
@@ -376,6 +461,68 @@ class ResponseValidator:
                             "an external action."
                         ),
                         matched_text=(matched_text),
+                    )
+                )
+
+    def _check_support_route_claims(
+        self,
+        response_text: str,
+        issues: list[ValidationIssue],
+    ) -> None:
+
+        seen_matches = set()
+
+        for pattern in self.SUPPORT_ROUTE_PATTERNS:
+            for match in pattern.finditer(response_text):
+                matched_text = match.group(0)
+
+                normalized = matched_text.lower().strip()
+
+                if normalized in seen_matches:
+                    continue
+
+                seen_matches.add(normalized)
+
+                issues.append(
+                    ValidationIssue(
+                        code=("unsupported_support_route_claim"),
+                        message=(
+                            "Response recommends or "
+                            "implies a support route "
+                            "that is not verified."
+                        ),
+                        matched_text=matched_text,
+                    )
+                )
+
+    def _check_third_party_claims(
+        self,
+        response_text: str,
+        issues: list[ValidationIssue],
+    ) -> None:
+
+        seen_matches = set()
+
+        for pattern in self.THIRD_PARTY_PATTERNS:
+            for match in pattern.finditer(response_text):
+                matched_text = match.group(0)
+
+                normalized = matched_text.lower().strip()
+
+                if normalized in seen_matches:
+                    continue
+
+                seen_matches.add(normalized)
+
+                issues.append(
+                    ValidationIssue(
+                        code=("unsupported_third_party_claim"),
+                        message=(
+                            "Response recommends an "
+                            "unverified third-party "
+                            "procedure or contact route."
+                        ),
+                        matched_text=matched_text,
                     )
                 )
 

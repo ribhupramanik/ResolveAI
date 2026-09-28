@@ -284,3 +284,87 @@ def test_unsupported_action_claims_are_detected(
     assert not result.is_valid
 
     assert any(issue.code == "unsupported_action_claim" for issue in result.issues)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        (
+            "You may want to contact the support team "
+            "that handled your original purchase."
+        ),
+        (
+            "Please reach out to customer support "
+            "for more information."
+        ),
+        (
+            "You can visit the help center "
+            "for assistance."
+        ),
+    ],
+)
+def test_unsupported_support_routes_are_detected(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+    response,
+):
+
+    result = validator.validate(
+        response,
+        "where is my refund",
+        verified_knowledge,
+        system_capabilities,
+    )
+
+    assert not result.is_valid
+
+    assert any(
+        issue.code
+        == "unsupported_support_route_claim"
+        for issue in result.issues
+    )
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        (
+            "You may want to contact your bank "
+            "for more information."
+        ),
+        (
+            "Please contact the merchant "
+            "about the refund."
+        ),
+        (
+            "You may want to reach out directly "
+            "to the merchant for more information."
+        ),
+        (
+            "You can check with your bank "
+            "about the transaction."
+        ),
+    ],
+)
+def test_unsupported_third_party_claims_are_detected(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+    response,
+):
+
+    result = validator.validate(
+        response,
+        "where is my refund",
+        verified_knowledge,
+        system_capabilities,
+    )
+
+    assert not result.is_valid
+
+    assert any(
+        issue.code
+        == "unsupported_third_party_claim"
+        for issue in result.issues
+    )
