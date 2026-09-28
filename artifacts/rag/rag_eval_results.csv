@@ -1,48 +1,23 @@
 query,expected_intent,response,retrieved_count,attempts,used_fallback,validation_issue_count,validation_issues,provider,model
 my refund still hasn't reached my bank account,track_refund,"I’m sorry to hear that your refund hasn’t appeared in your bank account yet.  
-To help you check the status, could you please provide:
+At this time ResolveAI does not have a live integration to check the status of individual refunds, so I’m unable to confirm the current state of your transaction.
 
-- The order or transaction number  
-- The date you requested the refund  
-- The payment method you used (e.g., credit card, bank transfer)
+I recommend reaching out to our customer‑support team directly. They can review your refund details and provide an update on its progress. If you need any further assistance, please let me know.",5,1,False,0,,groq,openai/gpt-oss-20b
+where is my order right now,track_order,"I’m sorry, but we don’t have a live order‑tracking system in place, so I can’t provide the current location or status of your shipment. For the most up‑to‑date information, please reach out to our customer support team. They’ll be able to help you with any tracking details.",5,1,False,0,,groq,openai/gpt-oss-20b
+I forgot my account password,recover_password,"I’m sorry, but I don’t have a password‑recovery procedure to share.  
+Please reach out to our customer support team for help resetting your password. They’ll be able to guide you through the process.",5,1,False,0,,groq,openai/gpt-oss-20b
+I want to permanently delete my account,delete_account,"I’m sorry, but I don’t have a verified procedure for permanently deleting an account. For account‑deletion requests, please contact our support team or use the help center to get the correct guidance.",5,1,False,0,,groq,openai/gpt-oss-20b
+what payment methods can I use,check_payment_methods,"I’m sorry, but I don’t have any verified information about the payment methods that are currently accepted. If you’d like, I can direct you to a customer‑support representative who can help you with this question.",5,2,False,1,unsupported_action_claim,groq,openai/gpt-oss-20b
+I need to change where my order is being shipped,change_shipping_address,"I’m sorry, but I don’t have a verified process for changing the shipping address on an existing order. I recommend reaching out to our customer‑support team for help with updating the delivery location. They’ll be able to guide you through the next steps.",5,1,False,0,,groq,openai/gpt-oss-20b
+how long will delivery take,delivery_period,"I’m sorry, but I don’t have a delivery‑time estimate or a delivery‑period policy available for your order.  
+You can check the status of your shipment by looking at the tracking information that was provided when the order shipped, or you can reach out to our customer‑support team for further assistance.",5,1,False,0,,groq,openai/gpt-oss-20b
+can you send me my invoice,get_invoice,"I’m sorry, but I don’t have a way to retrieve or send invoices.  
+If you need a copy of your invoice, please reach out to our customer‑support team directly and they’ll be able to help you.",5,1,False,0,,groq,openai/gpt-oss-20b
+I want to cancel the order I just placed,cancel_order,"I’m sorry, but I don’t have a confirmed procedure for canceling orders. Please reach out to our customer‑support team for assistance with canceling your recent order.",5,1,False,0,,groq,openai/gpt-oss-20b
+there is a problem with my payment,payment_issue,"I’m sorry to hear you’re having trouble with a payment.  
+Could you please describe what’s happening—e.g., an error message, a declined transaction, or something else? Knowing a bit more will help me point you in the right direction.  
 
-Once I have that information, I can guide you on the next steps. If you prefer, you can also reach out to our customer‑support team directly for further assistance.",5,2,False,1,unsupported_action_claim,groq,openai/gpt-oss-20b
-where is my order right now,track_order,"I’m happy to help you locate your order. Could you please share your order number or tracking number? Once I have that, I can provide you with the most up‑to‑date status.",5,1,False,0,,groq,openai/gpt-oss-20b
-I forgot my account password,recover_password,"I’m sorry you’re having trouble logging in.  
-Here’s a quick way to reset your password:
-
-1. Go to the login page of the service.  
-2. Click the **Forgot Password** (or similar) link.  
-3. Enter the email address you used to create the account.  
-4. Check your inbox (and spam/junk folder) for an email with a reset link.  
-5. Click the link and follow the on‑screen instructions to set a new password.
-
-If you don’t receive the email or run into any other issues, let me know and I’ll help you troubleshoot further.",5,1,False,0,,groq,openai/gpt-oss-20b
-I want to permanently delete my account,delete_account,"I’m happy to help you with that. To proceed with permanently deleting your account, I’ll need a bit of information to verify your identity and locate the correct account. Could you please provide:
-
-1. The email address or username associated with the account you’d like to delete.
-2. Any additional details that might help confirm it’s your account (for example, the last four digits of the phone number on file).
-
-Once I have that information, I can walk you through the steps to delete the account. If you prefer, you can also log in to the website, go to your account settings, and look for a “Delete account” or “Close account” option. Let me know how you’d like to proceed.",5,2,False,1,unsupported_action_claim,groq,openai/gpt-oss-20b
-what payment methods can I use,check_payment_methods,"I’m sorry, but I don’t have that information available. Please contact our customer support team for details on the payment methods you can use.",5,1,False,0,,groq,openai/gpt-oss-20b
-I need to change where my order is being shipped,change_shipping_address,"Sure, I can help you with that.  
-Could you please share:
-
-1. Your order number (or the email address used for the order)  
-2. The new shipping address you’d like the order sent to  
-
-Once I have that information, I can guide you through the steps to update the address or make the change for you.",5,1,False,0,,groq,openai/gpt-oss-20b
-how long will delivery take,delivery_period,"I’m happy to help you find out when your delivery is expected. Could you please share your order number or tracking number? Once I have that, I can give you the most accurate estimate.",5,2,False,1,unsupported_action_claim,groq,openai/gpt-oss-20b
-can you send me my invoice,get_invoice,"I’d be happy to help you get the invoice. Could you please let me know the invoice number (or the order ID) you’re looking for? Once I have that, I can guide you through the steps to view or download it from your account.",5,1,False,0,,groq,openai/gpt-oss-20b
-I want to cancel the order I just placed,cancel_order,"Sure, I can help you with that. Could you please share the order number (or any other details that identify the order) so I can guide you through the cancellation process?",5,1,False,0,,groq,openai/gpt-oss-20b
-there is a problem with my payment,payment_issue,"I’m sorry to hear you’re having trouble with your payment. Could you please share a bit more detail about what’s happening—such as any error messages, the type of payment you’re using, or when the issue occurred? That will help me understand the situation better and find the right solution for you.",5,1,False,0,,groq,openai/gpt-oss-20b
-I need to speak with a human agent,contact_human_agent,I understand you’d like to speak with a human agent. I can help you get connected—please let me know your preferred contact method or any additional details that might help us route you to the right person.,5,1,False,0,,groq,openai/gpt-oss-20b
-how do I create a new account,create_account,"Sure! To create a new account, you can usually follow these steps:
-
-1. **Visit the website or app** – Open the official site or download the mobile app for the service you’re interested in.  
-2. **Find the sign‑up link** – Look for a button or link that says “Sign Up,” “Create Account,” or “Register.”  
-3. **Enter your details** – Provide the information requested, such as your name, email address, and a password.  
-4. **Verify your email** – Most services will send a confirmation link to the email you provided. Click that link to activate your account.  
-5. **Complete any additional steps** – Some platforms may ask for extra details (e.g., phone number, profile picture) or require you to agree to terms of service.
-
-If you run into any trouble or need help with a specific platform, let me know which service you’re trying to sign up for, and I can give more tailored guidance.",5,1,False,0,,groq,openai/gpt-oss-20b
+I don’t have the ability to view or modify transactions directly, so once we have a clearer picture, I can suggest the next steps or connect you with a team member who can help further.",5,1,False,0,,groq,openai/gpt-oss-20b
+I need to speak with a human agent,contact_human_agent,"I’m sorry, but I’m not able to connect you to a human agent at this time.  
+You can reach out to our support team through the official support channels for further assistance.",5,1,False,0,,groq,openai/gpt-oss-20b
+how do I create a new account,create_account,"I’m sorry, but we don’t have a current account‑creation procedure available. For help setting up a new account, please reach out to our support team for further assistance.",5,1,False,0,,groq,openai/gpt-oss-20b

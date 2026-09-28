@@ -1,0 +1,22 @@
+[
+  {
+    "capability": "live_operational_data_access",
+    "available": false,
+    "content": "ResolveAI has no live integration for accessing customer account data, order status, refund status, payment status, shipment status, or transaction information."
+  },
+  {
+    "capability": "external_action_execution",
+    "available": false,
+    "content": "ResolveAI cannot modify, cancel, refund, update, submit, send, forward, route, escalate, or otherwise perform actions in external systems."
+  },
+  {
+    "capability": "human_support_routing",
+    "available": false,
+    "content": "ResolveAI cannot currently transfer, connect, route, forward, or escalate a conversation to a human support agent."
+  },
+  {
+    "capability": "verified_support_directory",
+    "available": false,
+    "content": "No verified customer-support team, help center, department, contact method, or escalation route is currently configured. ResolveAI must not invent support teams or describe what a human support team can access or perform."
+  }
+]
