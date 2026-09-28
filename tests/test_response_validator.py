@@ -198,6 +198,12 @@ def test_empty_response_raises_error(
         "I can help you locate your order.",
         "I'll route your request to the appropriate team.",
         "We can route this to customer support.",
+        "I can forward that information to the team that handles refunds.",
+        "I can forward those details to the support team.",
+        "I can pass along those details.",
+        "I'll pass along that information.",
+        "We can pass this along to the appropriate team.",
+        "Let me know if you'd like me to pass along those details.",
     ],
 )
 def test_unsupported_action_claims_are_detected(

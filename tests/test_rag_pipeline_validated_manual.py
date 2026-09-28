@@ -28,6 +28,10 @@ def main():
 
     print("RETRIEVED EXAMPLES:", result.retrieved_count)
 
+    print("VERIFIED KNOWLEDGE COUNT:", result.verified_knowledge_count)
+
+    print("VERIFIED KNOWLEDGE TOPICS:", result.verified_knowledge_topics)
+
     print("PROVIDER:", result.provider)
 
     print("MODEL:", result.model)

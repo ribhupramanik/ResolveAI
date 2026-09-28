@@ -67,7 +67,7 @@ class ResolveAIPipeline:
 
         verified_knowledge = self.knowledge_retriever.build(query)
 
-        prompt = self.prompt_builder.build(query, retrieved_context)
+        prompt = self.prompt_builder.build(query, retrieved_context, verified_knowledge)
 
         # First Generation Attempt
 

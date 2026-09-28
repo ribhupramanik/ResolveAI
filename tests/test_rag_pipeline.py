@@ -6,6 +6,9 @@ from src.rag.context_builder import (
 from src.rag.generator import (
     GeneratedResponse,
 )
+from src.rag.knowledge_retriever import (
+    VerifiedKnowledgeContext,
+)
 from src.rag.pipeline import (
     SAFE_FALLBACK,
     ResolveAIPipeline,
@@ -41,11 +44,33 @@ class FakeContextBuilder:
         )
 
 
+class FakeKnowledgeRetriever:
+    def build(
+        self,
+        query,
+    ):
+
+        return VerifiedKnowledgeContext(
+            context=(
+                "Verified knowledge item 1\n"
+                "Topic: refund_status\n"
+                "Content: No live refund-status "
+                "integration is currently available."
+            ),
+            retrieved_count=1,
+            topics=[
+                "refund_status",
+            ],
+            max_similarity=0.90,
+        )
+
+
 class FakePromptBuilder:
     def build(
         self,
         query,
         retrieved_context,
+        verified_knowledge,
     ):
 
         return PromptPayload(
@@ -86,6 +111,7 @@ def create_pipeline(
     return ResolveAIPipeline(
         generator=SequenceGenerator(responses),
         context_builder=FakeContextBuilder(),
+        knowledge_retriever=FakeKnowledgeRetriever(),
         prompt_builder=FakePromptBuilder(),
         validator=ResponseValidator(),
     )
@@ -102,6 +128,9 @@ def test_valid_first_response():
     assert result.attempts == 1
     assert not result.used_fallback
     assert result.validation_issues == []
+    assert result.verified_knowledge_count == 1
+
+    assert result.verified_knowledge_topics == ["refund_status"]
 
     assert "order number" in result.text
 
