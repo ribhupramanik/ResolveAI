@@ -160,28 +160,102 @@ class ResolveAIPipeline:
         for issue in issues:
             issue_lines.append(
                 (  # noqa: UP034
-                    f"-{issue.code}: {issue.matched_text}"
+                    f"- {issue.code}: {issue.matched_text}\n"
+                    f"  Reason: {issue.message}"
                 )
             )
 
         feedback = "\n".join(issue_lines)
 
+        # Build retry instructions based on
+        # the types of validation failures.
+        issue_codes = {
+            issue.code
+            for issue in issues
+        }
+
+        retry_rules = []
+
+        if "unsupported_action_claim" in issue_codes:
+            retry_rules.append(
+                "- Do not claim that ResolveAI can check, "
+                "investigate, modify, process, forward, "
+                "route, transfer, escalate, contact, or "
+                "perform any external action."
+            )
+
+        if "unsupported_support_route_claim" in issue_codes:
+            retry_rules.append(
+                "- Do not mention or recommend a support "
+                "team, customer-support department, help "
+                "center, support representative, support "
+                "agent, or escalation route unless it is "
+                "explicitly verified."
+            )
+
+        if "unsupported_third_party_claim" in issue_codes:
+            retry_rules.append(
+                "- Do not recommend contacting, calling, "
+                "emailing, checking with, or reaching out "
+                "to a merchant, bank, payment provider, "
+                "courier, carrier, or other third party."
+            )
+
+        if "unsupported_numeric_claim" in issue_codes:
+            retry_rules.append(
+                "- Remove numerical claims, durations, "
+                "deadlines, percentages, prices, or "
+                "quantities that are not explicitly "
+                "supported by the customer request or "
+                "authoritative evidence."
+            )
+
+        if "unresolved_placeholder" in issue_codes:
+            retry_rules.append(
+                "- Remove all unresolved template "
+                "placeholders."
+            )
+
+        retry_rule_text = "\n".join(
+            retry_rules
+        )
+
         retry_user_prompt = f"""
-{original_prompt.user_prompt}
+    {original_prompt.user_prompt}
 
-VALIDATION FEEDBACK FROM THE PREVIOUS DRAFT:
+    VALIDATION FEEDBACK FROM THE PREVIOUS DRAFT:
 
-The previous response was rejected because it contained the following unsupported
-content:
+    The previous response was rejected because it contained
+    unsupported content:
 
-{feedback}
+    {feedback}
 
-Rewrite the response.
+    REQUIRED CORRECTIONS:
 
-Do not repeat any of the flagged claims.
-Do not add unsupported facts, numbers, actions, timelines, policies, or promises.
-""".strip()
+    {retry_rule_text}
+
+    Rewrite the response from scratch.
+
+    Do not merely paraphrase the rejected claims.
+
+    Do not repeat any flagged action, support route,
+    third-party recommendation, unsupported numerical
+    claim, placeholder, timeline, policy, or promise.
+
+    If the verified evidence only establishes a limitation,
+    state that limitation clearly.
+
+    If no verified next step exists, say that no verified
+    next step is available.
+
+    Do not invent an alternative action, support route,
+    third-party procedure, timeline, policy, capability,
+    or contact method.
+
+    Return only the corrected customer-facing response.
+    """.strip()
 
         return PromptPayload(
-            system_prompt=(original_prompt.system_prompt), user_prompt=retry_user_prompt
+            system_prompt=original_prompt.system_prompt,
+            user_prompt=retry_user_prompt,
         )
