@@ -321,6 +321,27 @@ class ResponseValidator:
             r")\b",
             re.IGNORECASE,
         ),
+        re.compile(
+            r"\b(?:"
+            r"contact"
+            r"|call"
+            r"|email"
+            r"|check\s+with"
+            r"|reach\s+out(?:\s+directly)?\s+to"
+            r")\s+"
+            r"(?:the\s+|your\s+|a\s+)?"
+            r"(?:"
+            r"merchant"
+            r"|bank"
+            r"|payment\s+provider"
+            r"|courier"
+            r"|carrier"
+            r"|party\s+that\s+(?:processed|handled)"
+            r"(?:\s+the)?\s+"
+            r"(?:refund|payment|transaction|order)"
+            r")\b",
+            re.IGNORECASE,
+        ),
     ]
 
     NUMERIC_CLAIM_PATTERN = re.compile(

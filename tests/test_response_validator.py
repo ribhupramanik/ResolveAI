@@ -345,6 +345,10 @@ def test_unsupported_support_routes_are_detected(
             "You can check with your bank "
             "about the transaction."
         ),
+        (
+            "You may want to check with the party "
+            "that processed the refund directly."
+        ),
     ],
 )
 def test_unsupported_third_party_claims_are_detected(
