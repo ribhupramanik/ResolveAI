@@ -1,10 +1,13 @@
 import pytest
 
-from src.rag.context_builder import (
-    RetrievedContext,
+from src.rag.knowledge_retriever import (
+    VerifiedKnowledgeContext,
 )
 from src.rag.response_validator import (
     ResponseValidator,
+)
+from src.rag.system_capabilities import (
+    SystemCapabilitiesContext,
 )
 
 
@@ -14,41 +17,62 @@ def validator():
 
 
 @pytest.fixture
-def context():
+def verified_knowledge():
 
-    return RetrievedContext(
+    return VerifiedKnowledgeContext(
         context=(
-            "Example 1\n"
-            "Customer request: "
-            "where is my refund\n"
-            "Historical resolution: "
-            "Please provide your order "
-            "number and refund request date.\n"
-            "Intent: track_refund\n"
-            "Similarity: 0.8200"
+            "Verified knowledge item 1\n"
+            "Topic: refund_status\n"
+            "Content: No live refund-status "
+            "integration is currently available. "
+            "ResolveAI cannot verify the current "
+            "status of a customer's refund."
         ),
         retrieved_count=1,
-        max_similarity=0.82,
-        min_similarity=0.82,
+        topics=[
+            "refund_status",
+        ],
+        max_similarity=0.90,
+    )
+
+
+@pytest.fixture
+def system_capabilities():
+
+    return SystemCapabilitiesContext(
+        context=(
+            "System capability 1\n"
+            "Capability: live_operational_data_access\n"
+            "Status: unavailable\n"
+            "Content: ResolveAI has no live access "
+            "to customer account, order, refund, "
+            "payment, shipment, or transaction data."
+        ),
+        capability_count=1,
+        capabilities=[
+            "live_operational_data_access",
+        ],
     )
 
 
 def test_clean_response_passes(
     validator,
-    context,
+    verified_knowledge,
+    system_capabilities,
 ):
 
     response = (
-        "I'm sorry your refund has not "
-        "arrived yet. Please provide your "
-        "order number and the date you "
-        "requested the refund."
+        "I'm sorry your refund has not arrived yet. "
+        "ResolveAI cannot verify the current refund "
+        "status because live refund-status information "
+        "is unavailable."
     )
 
     result = validator.validate(
         response,
         "my refund has not arrived",
-        context,
+        verified_knowledge,
+        system_capabilities,
     )
 
     assert result.is_valid
@@ -57,7 +81,8 @@ def test_clean_response_passes(
 
 def test_placeholder_is_detected(
     validator,
-    context,
+    verified_knowledge,
+    system_capabilities,
 ):
 
     response = "Please visit {{Website URL}} for assistance."
@@ -65,7 +90,8 @@ def test_placeholder_is_detected(
     result = validator.validate(
         response,
         "I need help",
-        context,
+        verified_knowledge,
+        system_capabilities,
     )
 
     assert not result.is_valid
@@ -75,7 +101,8 @@ def test_placeholder_is_detected(
 
 def test_action_claim_is_detected(
     validator,
-    context,
+    verified_knowledge,
+    system_capabilities,
 ):
 
     response = "Please provide your order number. I can look into the details for you."
@@ -83,7 +110,8 @@ def test_action_claim_is_detected(
     result = validator.validate(
         response,
         "my refund has not arrived",
-        context,
+        verified_knowledge,
+        system_capabilities,
     )
 
     assert not result.is_valid
@@ -93,7 +121,8 @@ def test_action_claim_is_detected(
 
 def test_future_action_is_detected(
     validator,
-    context,
+    verified_knowledge,
+    system_capabilities,
 ):
 
     response = "I'll follow up once I have more information."
@@ -101,7 +130,8 @@ def test_future_action_is_detected(
     result = validator.validate(
         response,
         "where is my refund",
-        context,
+        verified_knowledge,
+        system_capabilities,
     )
 
     assert not result.is_valid
@@ -111,7 +141,8 @@ def test_future_action_is_detected(
 
 def test_unsupported_numeric_claim_is_detected(
     validator,
-    context,
+    verified_knowledge,
+    system_capabilities,
 ):
 
     response = "Refunds normally arrive within 5-10 business days."
@@ -119,7 +150,8 @@ def test_unsupported_numeric_claim_is_detected(
     result = validator.validate(
         response,
         "where is my refund",
-        context,
+        verified_knowledge,
+        system_capabilities,
     )
 
     assert not result.is_valid
@@ -129,13 +161,21 @@ def test_unsupported_numeric_claim_is_detected(
 
 def test_supported_numeric_claim_is_allowed(
     validator,
+    system_capabilities,
 ):
 
-    context = RetrievedContext(
-        context=("Historical resolution: Refund processing may take 7 business days."),
+    numeric_knowledge = VerifiedKnowledgeContext(
+        context=(
+            "Verified knowledge item 1\n"
+            "Topic: refund_timeline\n"
+            "Content: Refund processing may take "
+            "7 business days."
+        ),
         retrieved_count=1,
-        max_similarity=0.80,
-        min_similarity=0.80,
+        topics=[
+            "refund_timeline",
+        ],
+        max_similarity=0.90,
     )
 
     response = (
@@ -145,7 +185,26 @@ def test_supported_numeric_claim_is_allowed(
     result = validator.validate(
         response,
         "where is my refund",
-        context,
+        numeric_knowledge,
+        system_capabilities,
+    )
+
+    assert result.is_valid
+
+
+def test_numeric_claim_from_customer_query_is_allowed(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+
+    response = "You said that you have been waiting 7 business days."
+
+    result = validator.validate(
+        response,
+        "I have been waiting 7 business days",
+        verified_knowledge,
+        system_capabilities,
     )
 
     assert result.is_valid
@@ -153,14 +212,16 @@ def test_supported_numeric_claim_is_allowed(
 
 def test_empty_response_raises_error(
     validator,
-    context,
+    verified_knowledge,
+    system_capabilities,
 ):
 
     with pytest.raises(ValueError):
         validator.validate(
             "   ",
             "where is my refund",
-            context,
+            verified_knowledge,
+            system_capabilities,
         )
 
 
@@ -182,7 +243,7 @@ def test_empty_response_raises_error(
         "I can connect you to a human agent.",
         "We'll transfer you to support.",
         "I can provide you with the latest status.",
-        # New cases found during RAG evaluation
+        # Cases found during RAG evaluation
         "I'll forward your request to our support team.",
         "I will forward your request to the appropriate team.",
         "We'll forward this to customer support.",
@@ -198,24 +259,26 @@ def test_empty_response_raises_error(
         "I can help you locate your order.",
         "I'll route your request to the appropriate team.",
         "We can route this to customer support.",
-        "I can forward that information to the team that handles refunds.",
-        "I can forward those details to the support team.",
+        ("I can forward that information to the team that handles refunds."),
+        ("I can forward those details to the support team."),
         "I can pass along those details.",
         "I'll pass along that information.",
-        "We can pass this along to the appropriate team.",
-        "Let me know if you'd like me to pass along those details.",
+        ("We can pass this along to the appropriate team."),
+        ("Let me know if you'd like me to pass along those details."),
     ],
 )
 def test_unsupported_action_claims_are_detected(
     validator,
-    context,
+    verified_knowledge,
+    system_capabilities,
     response,
 ):
 
     result = validator.validate(
         response,
         "where is my refund",
-        context,
+        verified_knowledge,
+        system_capabilities,
     )
 
     assert not result.is_valid
