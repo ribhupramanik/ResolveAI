@@ -10,6 +10,9 @@ from src.rag.prompt_builder import (
     PromptBuilder,
     PromptPayload,
 )
+from src.rag.system_capabilities import (
+    SystemCapabilitiesContext,
+)
 
 
 @pytest.fixture
@@ -55,16 +58,38 @@ def verified_knowledge():
     )
 
 
+@pytest.fixture
+def system_capabilities():
+
+    return SystemCapabilitiesContext(
+        context=(
+            "System capability 1\n"
+            "Capability: human_support_routing\n"
+            "Status: unavailable\n"
+            "Content: ResolveAI cannot currently "
+            "transfer, connect, route, forward, or "
+            "escalate a conversation to a human "
+            "support agent."
+        ),
+        capability_count=1,
+        capabilities=[
+            "human_support_routing",
+        ],
+    )
+
+
 def test_prompt_payload_is_generated(
     prompt_builder,
     sample_context,
     verified_knowledge,
+    system_capabilities,
 ):
 
     result = prompt_builder.build(
         "my refund has not arrived",
         sample_context,
         verified_knowledge,
+        system_capabilities,
     )
 
     assert isinstance(
@@ -80,6 +105,7 @@ def test_user_prompt_contains_query(
     prompt_builder,
     sample_context,
     verified_knowledge,
+    system_capabilities,
 ):
 
     query = "my refund has not arrived"
@@ -88,36 +114,35 @@ def test_user_prompt_contains_query(
         query,
         sample_context,
         verified_knowledge,
+        system_capabilities,
     )
 
     assert query in result.user_prompt
 
 
 def test_user_prompt_contains_historical_context(
-    prompt_builder,
-    sample_context,
-    verified_knowledge,
+    prompt_builder, sample_context, verified_knowledge, system_capabilities
 ):
 
     result = prompt_builder.build(
         "where is my refund",
         sample_context,
         verified_knowledge,
+        system_capabilities,
     )
 
     assert sample_context.context in result.user_prompt
 
 
 def test_user_prompt_contains_verified_knowledge(
-    prompt_builder,
-    sample_context,
-    verified_knowledge,
+    prompt_builder, sample_context, verified_knowledge, system_capabilities
 ):
 
     result = prompt_builder.build(
         "where is my refund",
         sample_context,
         verified_knowledge,
+        system_capabilities,
     )
 
     assert "VERIFIED KNOWLEDGE:" in result.user_prompt
@@ -128,15 +153,14 @@ def test_user_prompt_contains_verified_knowledge(
 
 
 def test_system_prompt_contains_safety_rules(
-    prompt_builder,
-    sample_context,
-    verified_knowledge,
+    prompt_builder, sample_context, verified_knowledge, system_capabilities
 ):
 
     result = prompt_builder.build(
         "where is my refund",
         sample_context,
         verified_knowledge,
+        system_capabilities,
     )
 
     assert "Never invent or assume" in result.system_prompt
@@ -149,8 +173,7 @@ def test_system_prompt_contains_safety_rules(
 
 
 def test_no_historical_context_fallback(
-    prompt_builder,
-    verified_knowledge,
+    prompt_builder, verified_knowledge, system_capabilities
 ):
 
     empty_context = RetrievedContext(
@@ -164,6 +187,7 @@ def test_no_historical_context_fallback(
         "I need help with my account",
         empty_context,
         verified_knowledge,
+        system_capabilities,
     )
 
     assert (
@@ -173,8 +197,7 @@ def test_no_historical_context_fallback(
 
 
 def test_no_verified_knowledge_fallback(
-    prompt_builder,
-    sample_context,
+    prompt_builder, sample_context, system_capabilities
 ):
 
     empty_knowledge = VerifiedKnowledgeContext(
@@ -188,55 +211,97 @@ def test_no_verified_knowledge_fallback(
         "I need help with my account",
         sample_context,
         empty_knowledge,
+        system_capabilities,
     )
 
     assert "No relevant verified knowledge was retrieved." in result.user_prompt
 
 
-def test_historical_and_verified_context_are_separate(
-    prompt_builder,
-    sample_context,
-    verified_knowledge,
+def test_context_sections_are_separate(
+    prompt_builder, sample_context, verified_knowledge, system_capabilities
 ):
 
     result = prompt_builder.build(
         "where is my refund",
         sample_context,
         verified_knowledge,
+        system_capabilities,
     )
 
     assert "RETRIEVED HISTORICAL EXAMPLES:" in result.user_prompt
 
     assert "VERIFIED KNOWLEDGE:" in result.user_prompt
 
-    assert result.user_prompt.index(
-        "RETRIEVED HISTORICAL EXAMPLES:"
-    ) < result.user_prompt.index("VERIFIED KNOWLEDGE:")
+    assert (
+        result.user_prompt.index("RETRIEVED HISTORICAL EXAMPLES:")
+        < result.user_prompt.index("VERIFIED KNOWLEDGE:")
+        < result.user_prompt.index("SYSTEM CAPABILITIES:")
+    )
 
 
 def test_empty_query_raises_error(
     prompt_builder,
     sample_context,
     verified_knowledge,
+    system_capabilities,
 ):
 
     with pytest.raises(ValueError):
         prompt_builder.build(
-            "   ",
-            sample_context,
-            verified_knowledge,
+            "   ", sample_context, verified_knowledge, system_capabilities
         )
 
 
 def test_non_string_query_raises_error(
+    prompt_builder, sample_context, verified_knowledge, system_capabilities
+):
+
+    with pytest.raises(TypeError):
+        prompt_builder.build(
+            123, sample_context, verified_knowledge, system_capabilities
+        )
+
+
+def test_user_prompt_contains_system_capabilities(
+    prompt_builder,
+    sample_context,
+    verified_knowledge,
+    system_capabilities,
+):
+
+    result = prompt_builder.build(
+        "I need to speak with a human",
+        sample_context,
+        verified_knowledge,
+        system_capabilities,
+    )
+
+    assert "SYSTEM CAPABILITIES:" in result.user_prompt
+
+    assert system_capabilities.context in result.user_prompt
+
+    assert "human_support_routing" in result.user_prompt
+
+def test_no_system_capabilities_fallback(
     prompt_builder,
     sample_context,
     verified_knowledge,
 ):
 
-    with pytest.raises(TypeError):
-        prompt_builder.build(
-            123,
-            sample_context,
-            verified_knowledge,
-        )
+    empty_capabilities = SystemCapabilitiesContext(
+        context="",
+        capability_count=0,
+        capabilities=[],
+    )
+
+    result = prompt_builder.build(
+        "I need help",
+        sample_context,
+        verified_knowledge,
+        empty_capabilities,
+    )
+
+    assert (
+        "No system capability information is available."
+        in result.user_prompt
+    )
