@@ -5,6 +5,7 @@ from src.rag.generator import Generator
 from src.rag.knowledge_retriever import KnowledgeRetriever
 from src.rag.prompt_builder import PromptBuilder, PromptPayload
 from src.rag.response_validator import ResponseValidator, ValidationIssue
+from src.rag.system_capabilities import SystemCapabilitiesProvider
 
 SAFE_FALLBACK = (
     "I'm sorry, but I don't have enough verified information to provide a reliable response. "
@@ -23,6 +24,9 @@ class RAGResult:
     verified_knowledge_count: int
     verified_knowledge_topics: list[str]
 
+    system_capability_count: int
+    system_capabilities: list[str]
+
     attempts: int
     used_fallback: bool
 
@@ -35,6 +39,7 @@ class ResolveAIPipeline:
         generator: Generator,
         context_builder: ContextBuilder | None = None,
         knowledge_retriever: KnowledgeRetriever | None = None,
+        system_capabilities_provider: SystemCapabilitiesProvider | None = None,
         prompt_builder: PromptBuilder | None = None,
         validator: ResponseValidator | None = None,
     ):
@@ -56,6 +61,12 @@ class ResolveAIPipeline:
             else KnowledgeRetriever()
         )
 
+        self.system_capabilities_provider = (
+            system_capabilities_provider
+            if system_capabilities_provider is not None
+            else SystemCapabilitiesProvider()
+        )
+
     def run(self, query: str) -> RAGResult:
         if not isinstance(query, str):
             raise TypeError("Query must be a string")
@@ -67,7 +78,9 @@ class ResolveAIPipeline:
 
         verified_knowledge = self.knowledge_retriever.build(query)
 
-        prompt = self.prompt_builder.build(query, retrieved_context, verified_knowledge)
+        system_capabilities = self.system_capabilities_provider.build()
+
+        prompt = self.prompt_builder.build(query, retrieved_context, verified_knowledge, system_capabilities)
 
         # First Generation Attempt
 
@@ -85,6 +98,8 @@ class ResolveAIPipeline:
                 retrieved_count=(retrieved_context.retrieved_count),
                 verified_knowledge_count=(verified_knowledge.retrieved_count),
                 verified_knowledge_topics=(verified_knowledge.topics),
+                system_capability_count=(system_capabilities.capability_count),
+                system_capabilities=(system_capabilities.capabilities),
                 attempts=1,
                 used_fallback=False,
                 validation_issues=[],
@@ -108,6 +123,8 @@ class ResolveAIPipeline:
                 retrieved_count=(retrieved_context.retrieved_count),
                 verified_knowledge_count=(verified_knowledge.retrieved_count),
                 verified_knowledge_topics=(verified_knowledge.topics),
+                system_capability_count=(system_capabilities.capability_count),
+                system_capabilities=(system_capabilities.capabilities),
                 attempts=2,
                 used_fallback=False,
                 validation_issues=(first_validation.issues),
@@ -124,6 +141,8 @@ class ResolveAIPipeline:
             retrieved_count=(retrieved_context.retrieved_count),
             verified_knowledge_count=(verified_knowledge.retrieved_count),
             verified_knowledge_topics=(verified_knowledge.topics),
+            system_capability_count=(system_capabilities.capability_count),
+            system_capabilities=(system_capabilities.capabilities),
             attempts=2,
             used_fallback=True,
             validation_issues=all_issues,

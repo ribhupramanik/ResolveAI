@@ -20,6 +20,10 @@ from src.rag.response_validator import (
     ResponseValidator,
 )
 
+from src.rag.system_capabilities import (
+    SystemCapabilitiesContext,
+)
+
 
 class FakeContextBuilder:
     def build(
@@ -64,6 +68,27 @@ class FakeKnowledgeRetriever:
             max_similarity=0.90,
         )
 
+class FakeSystemCapabilitiesProvider:
+
+    def build(
+        self,
+    ):
+
+        return SystemCapabilitiesContext(
+            context=(
+                "System capability 1\n"
+                "Capability: human_support_routing\n"
+                "Status: unavailable\n"
+                "Content: ResolveAI cannot "
+                "transfer or connect customers "
+                "to a human support agent."
+            ),
+            capability_count=1,
+            capabilities=[
+                "human_support_routing",
+            ],
+        )
+
 
 class FakePromptBuilder:
     def build(
@@ -71,6 +96,7 @@ class FakePromptBuilder:
         query,
         retrieved_context,
         verified_knowledge,
+        system_capabilities,
     ):
 
         return PromptPayload(
@@ -112,6 +138,7 @@ def create_pipeline(
         generator=SequenceGenerator(responses),
         context_builder=FakeContextBuilder(),
         knowledge_retriever=FakeKnowledgeRetriever(),
+        system_capabilities_provider= FakeSystemCapabilitiesProvider(),
         prompt_builder=FakePromptBuilder(),
         validator=ResponseValidator(),
     )
@@ -131,6 +158,10 @@ def test_valid_first_response():
     assert result.verified_knowledge_count == 1
 
     assert result.verified_knowledge_topics == ["refund_status"]
+
+    assert (result.system_capability_count == 1)
+
+    assert ( result.system_capabilities == ["human_support_routing"])
 
     assert "order number" in result.text
 
