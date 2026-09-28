@@ -1,8 +1,11 @@
 import re
 from dataclasses import dataclass
 
-from src.rag.context_builder import (
-    RetrievedContext,
+from src.rag.knowledge_retriever import (
+    VerifiedKnowledgeContext,
+)
+from src.rag.system_capabilities import (
+    SystemCapabilitiesContext,
 )
 
 
@@ -292,7 +295,8 @@ class ResponseValidator:
         self,
         response_text: str,
         query: str,
-        retrieved_context: RetrievedContext,
+        verified_knowledge: VerifiedKnowledgeContext,
+        system_capabilities: SystemCapabilitiesContext,
     ) -> ValidationResult:
 
         if not isinstance(
@@ -319,7 +323,8 @@ class ResponseValidator:
         self._check_numeric_claims(
             response_text,
             query,
-            retrieved_context,
+            verified_knowledge,
+            system_capabilities,
             issues,
         )
 
@@ -378,16 +383,12 @@ class ResponseValidator:
         self,
         response_text: str,
         query: str,
-        retrieved_context: RetrievedContext,
+        verified_knowledge: VerifiedKnowledgeContext,
+        system_capabilities: SystemCapabilitiesContext,
         issues: list[ValidationIssue],
     ) -> None:
 
-        evidence = " ".join(  # noqa: FLY002
-            [
-                query,
-                retrieved_context.context,
-            ]
-        )
+        evidence = f"{query} {verified_knowledge.context} {system_capabilities.context}"
 
         normalized_evidence = self._normalize_text(evidence)
 
@@ -405,8 +406,8 @@ class ResponseValidator:
                     message=(
                         "Response contains a "
                         "numerical claim that is "
-                        "not present in the query "
-                        "or retrieved evidence."
+                        "not present in the customer request "
+                        "or authoritative evidence."
                     ),
                     matched_text=claim,
                 )

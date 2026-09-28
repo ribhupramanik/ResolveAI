@@ -8,8 +8,9 @@ from src.rag.response_validator import ResponseValidator, ValidationIssue
 from src.rag.system_capabilities import SystemCapabilitiesProvider
 
 SAFE_FALLBACK = (
-    "I'm sorry, but I don't have enough verified information to provide a reliable response. "
-    "Please provide any relevant order, transaction, or account details or contact a human support agent for further assistance"
+     "I'm sorry, but I don't have enough verified information "
+    "to provide a reliable response. I cannot provide a "
+    "verified next step without guessing."
 )
 
 
@@ -87,7 +88,7 @@ class ResolveAIPipeline:
         first_response = self.generator.generate(prompt)
 
         first_validation = self.validator.validate(
-            first_response.text, query, retrieved_context
+            first_response.text, query, verified_knowledge, system_capabilities,
         )
 
         if first_validation.is_valid:
@@ -112,7 +113,7 @@ class ResolveAIPipeline:
         second_response = self.generator.generate(retry_prompt)
 
         second_validation = self.validator.validate(
-            second_response.text, query, retrieved_context
+            second_response.text, query, verified_knowledge, system_capabilities,
         )
 
         if second_validation.is_valid:

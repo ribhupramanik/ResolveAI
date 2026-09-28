@@ -153,6 +153,27 @@ STRICT RULES:
     KNOWLEDGE or SYSTEM CAPABILITIES explicitly
     confirms it.
 
+19. Do not state or imply what an external party,
+    such as a merchant, bank, payment provider,
+    courier, or third-party service, can access,
+    confirm, investigate, process, or resolve unless
+    VERIFIED KNOWLEDGE explicitly supports that claim.
+
+20. Do not introduce general industry procedures,
+    customary timelines, typical workflows, or
+    statements such as "typically", "usually",
+    "normally", or "in most cases" unless they are
+    supported by VERIFIED KNOWLEDGE.
+
+21. Do not recommend waiting for an unspecified
+    "reasonable period" or similar duration when no
+    verified timeline is available.
+
+22. When neither ResolveAI nor VERIFIED KNOWLEDGE can
+    answer the request, state the limitation plainly.
+    Do not fill the gap with assumed third-party
+    procedures.
+
 Your response should be concise, professional, and
 limited to information justified by the customer's
 request, VERIFIED KNOWLEDGE, and SYSTEM CAPABILITIES.
@@ -234,6 +255,14 @@ request, VERIFIED KNOWLEDGE, and SYSTEM CAPABILITIES.
         If the required company-specific information is not
         available, say that it cannot be confirmed rather
         than guessing.
+
+        Do not compensate for missing verified information
+        by inventing general procedures for merchants, banks,
+        payment providers, couriers, or other third parties.
+
+        If no verified next step exists, it is acceptable to
+        say that ResolveAI cannot provide a verified next
+        step with the information currently available.
         """.strip()
 
         return PromptPayload(

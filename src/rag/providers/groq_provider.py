@@ -33,7 +33,8 @@ class GroqGenerator:
                 {"role": "user", "content": prompt.user_prompt},
             ],
             temperature=0.0,
-            max_completion_tokens=512,
+            reasoning_effort="low",
+            max_completion_tokens=1024,
             include_reasoning=False,
         )
 
