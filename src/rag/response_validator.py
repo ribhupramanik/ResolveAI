@@ -165,7 +165,8 @@ class ResponseValidator:
             re.IGNORECASE,
         ),
         # I'll forward your request...
-        # We will send your request...
+        # I can forward that information...
+        # We will send those details...
         # We'll route this...
         re.compile(
             r"\b(?:"
@@ -175,11 +176,11 @@ class ResponseValidator:
             r")"
             r"(?:forward|send|route|transfer|assign|submit)\s+"
             r"(?:"
-            r"your\s+(?:request|case|issue)"
+            r"your\s+(?:request|case|issue|details|information)"
             r"|"
-            r"this"
+            r"(?:this|that)\s*(?:request|case|issue|information|details)?"
             r"|"
-            r"the\s+(?:request|case|issue)"
+            r"(?:those|the)\s+(?:details|information|request|case|issue)"
             r")\b",
             re.IGNORECASE,
         ),
@@ -200,6 +201,46 @@ class ResponseValidator:
             r"(?:can\s+|will\s+)?"
             r"help(?:\s+you)?\s+"
             r"locate\b",
+            re.IGNORECASE,
+        ),
+        # I can pass along those details...
+        # I'll pass along that information...
+        # We can pass this along...
+        re.compile(
+            r"\b(?:"
+            r"(?:i|we)\s+(?:can\s+|will\s+)?"
+            r"|"
+            r"(?:i|we)['’]ll\s+"
+            r")"
+            r"pass\s+"
+            r"(?:"
+            r"along\s+"
+            r"(?:"
+            r"those\s+details"
+            r"|that\s+information"
+            r"|the\s+(?:details|information)"
+            r"|your\s+(?:details|information|request|case|issue)"
+            r")"
+            r"|"
+            r"(?:this|that|it)\s+along"
+            r")\b",
+            re.IGNORECASE,
+        ),
+        # If you'd like me to pass along...
+        # If you would like me to forward...
+        re.compile(
+            r"\b(?:"
+            r"you['’]d\s+like\s+me\s+to"
+            r"|"
+            r"you\s+would\s+like\s+me\s+to"
+            r")\s+"
+            r"(?:"
+            r"pass\s+along"
+            r"|forward"
+            r"|send"
+            r"|route"
+            r"|transfer"
+            r")\b",
             re.IGNORECASE,
         ),
     ]
