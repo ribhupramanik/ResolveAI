@@ -21,11 +21,6 @@ from src.api.schemas.chat import (
     ChatMetadata,
     ValidationIssueResponse,
 )
-
-from src.rag.conversation import (
-    ConversationTurn,
-)
-
 from src.api.schemas.conversation import (
     ConversationCreate,
     ConversationResponse,
@@ -38,6 +33,9 @@ from src.api.schemas.message import (
 from src.db.models import (
     Conversation,
     Message,
+)
+from src.rag.conversation import (
+    ConversationTurn,
 )
 from src.rag.pipeline import (
     ResolveAIPipeline,
@@ -57,6 +55,18 @@ DatabaseDependency = Annotated[
     Session,
     Depends(get_db),
 ]
+
+
+def build_conversation_title(
+    message: str,
+    max_length: int = 50,
+) -> str:
+    clean_message = " ".join(message.split())
+
+    if len(clean_message) <= max_length:
+        return clean_message
+
+    return clean_message[:max_length].rstrip() + "..."
 
 
 @router.post(
@@ -188,23 +198,17 @@ def send_message(
 
     history_statement = (
         select(Message)
-        .where(
-            Message.conversation_id
-            == conversation.id
-        )
-        .order_by(
-            Message.id.desc()
-        )
+        .where(Message.conversation_id == conversation.id)
+        .order_by(Message.id.desc())
         .limit(12)
     )
 
-    recent_messages = list(
-        db.scalars(
-            history_statement
-        ).all()
-    )
+    recent_messages = list(db.scalars(history_statement).all())
 
     recent_messages.reverse()
+
+    if conversation.title == "New conversation" and not recent_messages:
+        conversation.title = build_conversation_title(customer_text)
 
     conversation_history = [
         ConversationTurn(
@@ -225,9 +229,7 @@ def send_message(
     try:
         result = pipeline.run(
             customer_text,
-            conversation_history=(
-                conversation_history
-            ),
+            conversation_history=(conversation_history),
         )
 
     except Exception as exc:
