@@ -1,15 +1,15 @@
 from dataclasses import dataclass
 
 from src.rag.context_builder import ContextBuilder
+from src.rag.conversation import ConversationTurn
 from src.rag.generator import Generator
 from src.rag.knowledge_retriever import KnowledgeRetriever
 from src.rag.prompt_builder import PromptBuilder, PromptPayload
 from src.rag.response_validator import ResponseValidator, ValidationIssue
 from src.rag.system_capabilities import SystemCapabilitiesProvider
-from src.rag.conversation import ConversationTurn
 
 SAFE_FALLBACK = (
-     "I'm sorry, but I don't have enough verified information "
+    "I'm sorry, but I don't have enough verified information "
     "to provide a reliable response. I cannot provide a "
     "verified next step without guessing."
 )
@@ -72,47 +72,27 @@ class ResolveAIPipeline:
     def run(
         self,
         query: str,
-        conversation_history: list[
-            ConversationTurn
-        ] | None = None,
+        conversation_history: list[ConversationTurn] | None = None,
     ) -> RAGResult:
 
         if not isinstance(query, str):
-            raise TypeError(
-                "Query must be a string"
-            )
+            raise TypeError("Query must be a string")
 
         if not query.strip():
-            raise ValueError(
-                "Query cannot be empty"
-            )
+            raise ValueError("Query cannot be empty")
 
-        history = (
-            conversation_history or []
+        history = conversation_history or []
+
+        contextual_query = self._build_contextual_query(
+            query,
+            history,
         )
 
-        contextual_query = (
-            self._build_contextual_query(
-                query,
-                history,
-            )
-        )
+        retrieved_context = self.context_builder.build(contextual_query)
 
-        retrieved_context = (
-            self.context_builder.build(
-                contextual_query
-            )
-        )
+        verified_knowledge = self.knowledge_retriever.build(contextual_query)
 
-        verified_knowledge = (
-            self.knowledge_retriever.build(
-                contextual_query
-            )
-        )
-
-        system_capabilities = (
-            self.system_capabilities_provider.build()
-        )
+        system_capabilities = self.system_capabilities_provider.build()
 
         prompt = self.prompt_builder.build(
             query,
@@ -197,23 +177,16 @@ class ResolveAIPipeline:
     @staticmethod
     def _build_contextual_query(
         query: str,
-        conversation_history: list[
-            ConversationTurn
-        ],
+        conversation_history: list[ConversationTurn],
     ) -> str:
 
         previous_customer_messages = [
             turn.content.strip()
             for turn in conversation_history
-            if (
-                turn.role == "user"
-                and turn.content.strip()
-            )
+            if (turn.role == "user" and turn.content.strip())
         ]
 
-        recent_customer_messages = (
-            previous_customer_messages[-3:]
-        )
+        recent_customer_messages = previous_customer_messages[-3:]
 
         return "\n".join(
             [
@@ -233,8 +206,7 @@ class ResolveAIPipeline:
         for issue in issues:
             issue_lines.append(
                 (  # noqa: UP034
-                    f"- {issue.code}: {issue.matched_text}\n"
-                    f"  Reason: {issue.message}"
+                    f"- {issue.code}: {issue.matched_text}\n  Reason: {issue.message}"
                 )
             )
 
@@ -242,10 +214,7 @@ class ResolveAIPipeline:
 
         # Build retry instructions based on
         # the types of validation failures.
-        issue_codes = {
-            issue.code
-            for issue in issues
-        }
+        issue_codes = {issue.code for issue in issues}
 
         retry_rules = []
 
@@ -272,7 +241,6 @@ class ResolveAIPipeline:
                 "emailing, checking with, or reaching out "
                 "to a merchant, bank, payment provider, "
                 "courier, carrier, or other third party."
-                
             )
 
         if "unsupported_numeric_claim" in issue_codes:
@@ -285,14 +253,9 @@ class ResolveAIPipeline:
             )
 
         if "unresolved_placeholder" in issue_codes:
-            retry_rules.append(
-                "- Remove all unresolved template "
-                "placeholders."
-            )
+            retry_rules.append("- Remove all unresolved template placeholders.")
 
-        retry_rule_text = "\n".join(
-            retry_rules
-        )
+        retry_rule_text = "\n".join(retry_rules)
 
         retry_user_prompt = f"""
     {original_prompt.user_prompt}

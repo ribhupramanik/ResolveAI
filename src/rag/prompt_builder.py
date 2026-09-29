@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 
 from src.rag.context_builder import RetrievedContext
+from src.rag.conversation import ConversationTurn
 from src.rag.knowledge_retriever import VerifiedKnowledgeContext
 from src.rag.system_capabilities import SystemCapabilitiesContext
-from src.rag.conversation import ConversationTurn
 
 
 @dataclass
@@ -19,7 +19,7 @@ class PromptBuilder:
         retrieved_context: RetrievedContext,
         verified_knowledge: VerifiedKnowledgeContext,
         system_capabilities: SystemCapabilitiesContext,
-        conversation_history: list[ConversationTurn] | None = None
+        conversation_history: list[ConversationTurn] | None = None,
     ) -> PromptPayload:
 
         if not isinstance(query, str):
@@ -41,17 +41,11 @@ class PromptBuilder:
                 else:
                     continue
 
-                history_lines.append(
-                    f"{speaker}: {turn.content}"
-                )
+                history_lines.append(f"{speaker}: {turn.content}")
 
-            conversation_section = "\n".join(
-                history_lines
-            )
+            conversation_section = "\n".join(history_lines)
         else:
-            conversation_section = (
-                "No previous conversation history."
-            )
+            conversation_section = "No previous conversation history."
 
         system_prompt = """
 You are ResolveAI, an AI assistant that helps
