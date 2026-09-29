@@ -6,23 +6,51 @@ from fastapi import (
     HTTPException,
     status,
 )
+
+from datetime import (
+    datetime,
+    timezone,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import (
     get_db,
+    get_pipeline,
 )
 from src.api.schemas.conversation import (
     ConversationCreate,
     ConversationResponse,
 )
-from src.db.models import Conversation
+
+from src.api.schemas.chat import (
+    ChatMetadata,
+    ValidationIssueResponse,
+)
+
+from src.api.schemas.message import (
+    ConversationMessageResponse,
+    MessageCreate,
+    MessageResponse,
+)
+from src.db.models import (
+    Conversation,
+    Message,
+)
+
+from src.rag.pipeline import (
+    ResolveAIPipeline,
+)
 
 router = APIRouter(
     prefix="/conversations",
     tags=["Conversations"],
 )
 
+PipelineDependency = Annotated[
+    ResolveAIPipeline,
+    Depends(get_pipeline),
+]
 
 DatabaseDependency = Annotated[
     Session,
@@ -96,3 +124,152 @@ def get_conversation(
         )
 
     return conversation
+
+
+@router.get(
+    "/{conversation_id}/messages",
+    response_model=list[MessageResponse],
+)
+def list_messages(
+    conversation_id: int,
+    db: DatabaseDependency,
+) -> list[Message]:
+
+    conversation = db.get(
+        Conversation,
+        conversation_id,
+    )
+
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found.",
+        )
+
+    statement = (
+        select(Message)
+        .where(
+            Message.conversation_id
+            == conversation_id
+        )
+        .order_by(
+            Message.created_at.asc(),
+            Message.id.asc(),
+        )
+    )
+
+    messages = (
+        db.scalars(statement)
+        .all()
+    )
+
+    return list(messages)
+
+@router.post(
+    "/{conversation_id}/messages",
+    response_model=ConversationMessageResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def send_message(
+    conversation_id: int,
+    payload: MessageCreate,
+    db: DatabaseDependency,
+    pipeline: PipelineDependency,
+) -> ConversationMessageResponse:
+
+    conversation = db.get(
+        Conversation,
+        conversation_id,
+    )
+
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found.",
+        )
+
+    customer_text = (
+        payload.message.strip()
+    )
+
+    user_message = Message(
+        conversation_id=conversation.id,
+        role="user",
+        content=customer_text,
+    )
+
+    db.add(user_message)
+
+    try:
+        result = pipeline.run(
+            customer_text
+        )
+
+    except Exception as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "ResolveAI could not process "
+                "the request."
+            ),
+        ) from exc
+
+    assistant_message = Message(
+        conversation_id=conversation.id,
+        role="assistant",
+        content=result.text,
+    )
+
+    db.add(assistant_message)
+
+    conversation.updated_at = (
+        datetime.now(timezone.utc)
+    )
+
+    db.commit()
+
+    db.refresh(user_message)
+    db.refresh(assistant_message)
+
+    retry_trigger_issues = [
+        ValidationIssueResponse(
+            code=issue.code,
+            message=issue.message,
+            matched_text=issue.matched_text,
+        )
+        for issue
+        in result.validation_issues
+    ]
+
+    metadata = ChatMetadata(
+        retrieved_count=(
+            result.retrieved_count
+        ),
+        verified_knowledge_count=(
+            result.verified_knowledge_count
+        ),
+        verified_knowledge_topics=(
+            result.verified_knowledge_topics
+        ),
+        system_capability_count=(
+            result.system_capability_count
+        ),
+        system_capabilities=(
+            result.system_capabilities
+        ),
+        attempts=result.attempts,
+        used_fallback=result.used_fallback,
+        retry_trigger_issues=(
+            retry_trigger_issues
+        ),
+        provider=result.provider,
+        model=result.model,
+    )
+
+    return ConversationMessageResponse(
+        user_message=user_message,
+        assistant_message=assistant_message,
+        metadata=metadata,
+    )
