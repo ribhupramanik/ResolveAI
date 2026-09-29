@@ -1,14 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { sendMessage } from "./api/chat";
+import {
+  createConversation,
+  getConversationMessages,
+  getConversations,
+  sendConversationMessage,
+} from "./api/conversations";
+
 import ChatPanel from "./components/ChatPanel";
 import ConversationSidebar from "./components/ConversationSidebar";
 import IntelligencePanel from "./components/IntelligencePanel";
 
 function App() {
-  const [message, setMessage] = useState("");
+  const [conversations, setConversations] = useState([]);
+
+  const [activeConversationId, setActiveConversationId] = useState(null);
 
   const [messages, setMessages] = useState([]);
+
+  const [message, setMessage] = useState("");
 
   const [metadata, setMetadata] = useState(null);
 
@@ -16,7 +26,69 @@ function App() {
 
   const [error, setError] = useState("");
 
-  const handleSubmit = async (event) => {
+  useEffect(() => {
+    loadConversations();
+  }, []);
+
+  useEffect(() => {
+    if (!activeConversationId) {
+      setMessages([]);
+      return;
+    }
+
+    loadMessages(activeConversationId);
+  }, [activeConversationId]);
+
+  async function loadConversations() {
+    try {
+      const data = await getConversations();
+
+      setConversations(data);
+
+      if (data.length > 0 && !activeConversationId) {
+        setActiveConversationId(data[0].id);
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to load conversations.",
+      );
+    }
+  }
+
+  async function loadMessages(conversationId) {
+    try {
+      setError("");
+
+      const data = await getConversationMessages(conversationId);
+
+      setMessages(data);
+
+      setMetadata(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load messages.");
+    }
+  }
+
+  async function handleNewConversation() {
+    try {
+      setError("");
+
+      const conversation = await createConversation();
+
+      setConversations((current) => [conversation, ...current]);
+
+      setActiveConversationId(conversation.id);
+
+      setMessages([]);
+      setMetadata(null);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to create conversation.",
+      );
+    }
+  }
+
+  async function handleSubmit(event) {
     event.preventDefault();
 
     const trimmedMessage = message.trim();
@@ -25,41 +97,64 @@ function App() {
       return;
     }
 
-    const userMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: trimmedMessage,
-    };
-
-    setMessages((current) => [...current, userMessage]);
-
-    setMessage("");
-    setLoading(true);
-    setError("");
+    let conversationId = activeConversationId;
 
     try {
-      const data = await sendMessage(trimmedMessage);
+      setLoading(true);
+      setError("");
 
-      const assistantMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: data.message,
+      if (!conversationId) {
+        const conversation = await createConversation();
+
+        conversationId = conversation.id;
+
+        setConversations((current) => [conversation, ...current]);
+
+        setActiveConversationId(conversation.id);
+      }
+
+      const temporaryUserMessage = {
+        id: `temp-${crypto.randomUUID()}`,
+        conversation_id: conversationId,
+        role: "user",
+        content: trimmedMessage,
+        created_at: new Date().toISOString(),
       };
 
-      setMessages((current) => [...current, assistantMessage]);
+      setMessages((current) => [...current, temporaryUserMessage]);
+
+      setMessage("");
+
+      const data = await sendConversationMessage(
+        conversationId,
+        trimmedMessage,
+      );
+
+      setMessages((current) => [
+        ...current.filter((item) => item.id !== temporaryUserMessage.id),
+        data.user_message,
+        data.assistant_message,
+      ]);
 
       setMetadata(data.metadata);
+
+      await loadConversations();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
     <main className="h-screen overflow-hidden bg-slate-950 text-slate-100">
       <div className="flex h-full">
-        <ConversationSidebar />
+        <ConversationSidebar
+          conversations={conversations}
+          activeConversationId={activeConversationId}
+          onSelectConversation={setActiveConversationId}
+          onNewConversation={handleNewConversation}
+        />
 
         <ChatPanel
           messages={messages}
