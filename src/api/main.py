@@ -1,20 +1,10 @@
 from contextlib import asynccontextmanager
-from typing import Annotated
 
-from fastapi import (
-    Depends,
-    FastAPI,
-    HTTPException,
-)
+from fastapi import FastAPI
 
-from src.api.dependencies import (
-    get_pipeline,
-)
-from src.api.schemas.chat import (
-    ChatMetadata,
-    ChatRequest,
-    ChatResponse,
-    ValidationIssueResponse,
+from src.api.routes import (
+    chat,
+    health,
 )
 from src.rag.pipeline import (
     ResolveAIPipeline,
@@ -41,61 +31,12 @@ app = FastAPI(
 )
 
 
-PipelineDependency = Annotated[
-    ResolveAIPipeline,
-    Depends(get_pipeline),
-]
-
-
-@app.get("/api/v1/health")
-def health_check():
-    return {
-        "status": "ok",
-        "service": "ResolveAI",
-    }
-
-
-@app.post(
-    "/api/v1/chat",
-    response_model=ChatResponse,
+app.include_router(
+    health.router,
+    prefix="/api/v1",
 )
-def chat(
-    request: ChatRequest,
-    pipeline: PipelineDependency,
-) -> ChatResponse:
 
-    try:
-        result = pipeline.run(request.message)
-
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=("ResolveAI could not process the request."),
-        ) from exc
-
-    retry_trigger_issues = [
-        ValidationIssueResponse(
-            code=issue.code,
-            message=issue.message,
-            matched_text=issue.matched_text,
-        )
-        for issue in result.validation_issues
-    ]
-
-    metadata = ChatMetadata(
-        retrieved_count=(result.retrieved_count),
-        verified_knowledge_count=(result.verified_knowledge_count),
-        verified_knowledge_topics=(result.verified_knowledge_topics),
-        system_capability_count=(result.system_capability_count),
-        system_capabilities=(result.system_capabilities),
-        attempts=result.attempts,
-        used_fallback=result.used_fallback,
-        retry_trigger_issues=retry_trigger_issues,
-        provider=result.provider,
-        model=result.model,
-    )
-
-    return ChatResponse(
-        message=result.text,
-        metadata=metadata,
-    )
+app.include_router(
+    chat.router,
+    prefix="/api/v1",
+)
