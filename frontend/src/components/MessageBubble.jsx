@@ -1,17 +1,8 @@
-function MessageBubble({
-  role,
-  content,
-}) {
+function MessageBubble({ role, content }) {
   const isUser = role === "user";
 
   return (
-    <div
-      className={`flex ${
-        isUser
-          ? "justify-end"
-          : "justify-start"
-      }`}
-    >
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
         className={`max-w-[75%] rounded-2xl px-4 py-3 ${
           isUser
@@ -20,14 +11,10 @@ function MessageBubble({
         }`}
       >
         <p className="mb-1 text-xs opacity-60">
-          {isUser
-            ? "Customer"
-            : "ResolveAI"}
+          {isUser ? "Customer" : "ResolveAI"}
         </p>
 
-        <p className="whitespace-pre-wrap leading-6">
-          {content}
-        </p>
+        <p className="whitespace-pre-wrap leading-6">{content}</p>
       </div>
     </div>
   );
