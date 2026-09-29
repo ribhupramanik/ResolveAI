@@ -198,17 +198,34 @@ def send_message(
 
     history_statement = (
         select(Message)
-        .where(Message.conversation_id == conversation.id)
-        .order_by(Message.id.desc())
+        .where(
+            Message.conversation_id
+            == conversation.id
+        )
+        .order_by(
+            Message.id.desc()
+        )
         .limit(12)
     )
 
-    recent_messages = list(db.scalars(history_statement).all())
+    recent_messages = list(
+        db.scalars(
+            history_statement
+        ).all()
+    )
 
     recent_messages.reverse()
 
-    if conversation.title == "New conversation" and not recent_messages:
-        conversation.title = build_conversation_title(customer_text)
+    if (
+        conversation.title
+        == "New conversation"
+        and not recent_messages
+    ):
+        conversation.title = (
+            build_conversation_title(
+                customer_text
+            )
+        )
 
     conversation_history = [
         ConversationTurn(
@@ -229,50 +246,115 @@ def send_message(
     try:
         result = pipeline.run(
             customer_text,
-            conversation_history=(conversation_history),
+            conversation_history=(
+                conversation_history
+            ),
         )
+
+        retry_trigger_issues = [
+            {
+                "code": issue.code,
+                "message": issue.message,
+                "matched_text": (
+                    issue.matched_text
+                ),
+            }
+            for issue
+            in result.validation_issues
+        ]
+
+        metadata_data = {
+            "retrieved_count":
+                result.retrieved_count,
+
+            "verified_knowledge_count":
+                result.verified_knowledge_count,
+
+            "verified_knowledge_topics":
+                result.verified_knowledge_topics,
+
+            "system_capability_count":
+                result.system_capability_count,
+
+            "system_capabilities":
+                result.system_capabilities,
+
+            "attempts":
+                result.attempts,
+
+            "used_fallback":
+                result.used_fallback,
+
+            "retry_trigger_issues":
+                retry_trigger_issues,
+
+            "provider":
+                result.provider,
+
+            "model":
+                result.model,
+        }
+
+        assistant_message = Message(
+            conversation_id=conversation.id,
+            role="assistant",
+            content=result.text,
+            ai_metadata=metadata_data,
+        )
+
+        db.add(assistant_message)
+
+        conversation.updated_at = (
+            datetime.now(timezone.utc)
+        )
+
+        db.commit()
+
+        db.refresh(user_message)
+        db.refresh(assistant_message)
 
     except Exception as exc:
         db.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=("ResolveAI could not process the request."),
+            detail=(
+                "ResolveAI could not process "
+                "the request."
+            ),
         ) from exc
 
-    assistant_message = Message(
-        conversation_id=conversation.id,
-        role="assistant",
-        content=result.text,
-    )
-
-    db.add(assistant_message)
-
-    conversation.updated_at = datetime.now(timezone.utc)
-
-    db.commit()
-
-    db.refresh(user_message)
-    db.refresh(assistant_message)
-
-    retry_trigger_issues = [
-        ValidationIssueResponse(
-            code=issue.code,
-            message=issue.message,
-            matched_text=issue.matched_text,
-        )
-        for issue in result.validation_issues
-    ]
-
     metadata = ChatMetadata(
-        retrieved_count=(result.retrieved_count),
-        verified_knowledge_count=(result.verified_knowledge_count),
-        verified_knowledge_topics=(result.verified_knowledge_topics),
-        system_capability_count=(result.system_capability_count),
-        system_capabilities=(result.system_capabilities),
+        retrieved_count=(
+            result.retrieved_count
+        ),
+        verified_knowledge_count=(
+            result.verified_knowledge_count
+        ),
+        verified_knowledge_topics=(
+            result.verified_knowledge_topics
+        ),
+        system_capability_count=(
+            result.system_capability_count
+        ),
+        system_capabilities=(
+            result.system_capabilities
+        ),
         attempts=result.attempts,
-        used_fallback=result.used_fallback,
-        retry_trigger_issues=(retry_trigger_issues),
+        used_fallback=(
+            result.used_fallback
+        ),
+        retry_trigger_issues=[
+            ValidationIssueResponse(
+                code=issue["code"],
+                message=issue["message"],
+                matched_text=(
+                    issue["matched_text"]
+                ),
+            )
+            for issue
+            in retry_trigger_issues
+        ],
         provider=result.provider,
         model=result.model,
     )

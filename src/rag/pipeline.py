@@ -88,12 +88,16 @@ class ResolveAIPipeline:
             history,
         )
 
+        knowledge_query = self._build_knowledge_query(
+            query,
+            history,
+        )
+
         retrieved_context = self.context_builder.build(contextual_query)
 
-        verified_knowledge = self.knowledge_retriever.build(contextual_query)
+        verified_knowledge = self.knowledge_retriever.build(knowledge_query)
 
         system_capabilities = self.system_capabilities_provider.build()
-
         prompt = self.prompt_builder.build(
             query,
             retrieved_context,
@@ -191,6 +195,62 @@ class ResolveAIPipeline:
         return "\n".join(
             [
                 *recent_customer_messages,
+                query.strip(),
+            ]
+        )
+
+    @staticmethod
+    def _build_knowledge_query(
+        query: str,
+        conversation_history: list[
+            ConversationTurn
+        ],
+    ) -> str:
+
+        normalized_query = (
+            query.lower().strip()
+        )
+
+        ambiguous_phrases = (
+            "do that",
+            "do it",
+            "how can i do that",
+            "how do i do that",
+            "how can i do it",
+            "how do i do it",
+            "what about that",
+            "what about it",
+            "can i do that",
+            "can i do it",
+        )
+
+        is_ambiguous = any(
+            phrase in normalized_query
+            for phrase in ambiguous_phrases
+        )
+
+        if not is_ambiguous:
+            return query.strip()
+
+        previous_customer_messages = [
+            turn.content.strip()
+            for turn in conversation_history
+            if (
+                turn.role == "user"
+                and turn.content.strip()
+            )
+        ]
+
+        if not previous_customer_messages:
+            return query.strip()
+
+        previous_message = (
+            previous_customer_messages[-1]
+        )
+
+        return "\n".join(  # noqa: FLY002
+            [
+                previous_message,
                 query.strip(),
             ]
         )

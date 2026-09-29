@@ -25,6 +25,7 @@ class MessageResponse(BaseModel):
     conversation_id: int
     role: str
     content: str
+    ai_metadata: dict | None = None
     created_at: datetime
 
 
