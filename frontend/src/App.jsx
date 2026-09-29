@@ -59,11 +59,18 @@ function App() {
     try {
       setError("");
 
+      setMessages([]);
+      setMetadata(null);
+
       const data = await getConversationMessages(conversationId);
 
       setMessages(data);
 
-      setMetadata(null);
+      const latestAssistantWithMetadata = [...data]
+        .reverse()
+        .find((item) => item.role === "assistant" && item.ai_metadata);
+
+      setMetadata(latestAssistantWithMetadata?.ai_metadata ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load messages.");
     }
