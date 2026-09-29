@@ -3,10 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.routes import (
-    chat,
-    health,
-)
+from src.api.routes import chat, conversations, health
 from src.rag.pipeline import (
     ResolveAIPipeline,
 )
@@ -50,5 +47,10 @@ app.include_router(
 
 app.include_router(
     chat.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    conversations.router,
     prefix="/api/v1",
 )
