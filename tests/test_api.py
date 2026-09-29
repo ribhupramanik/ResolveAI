@@ -27,6 +27,7 @@ class FakePipeline:
     def run(
         self,
         query: str,
+        conversation_history=None,
     ) -> RAGResult:
 
         if self.should_fail:

@@ -1,3 +1,7 @@
+from datetime import (
+    datetime,
+    timezone,
+)
 from typing import Annotated
 
 from fastapi import (
@@ -6,11 +10,6 @@ from fastapi import (
     HTTPException,
     status,
 )
-
-from datetime import (
-    datetime,
-    timezone,
-)
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -18,16 +17,19 @@ from src.api.dependencies import (
     get_db,
     get_pipeline,
 )
-from src.api.schemas.conversation import (
-    ConversationCreate,
-    ConversationResponse,
-)
-
 from src.api.schemas.chat import (
     ChatMetadata,
     ValidationIssueResponse,
 )
 
+from src.rag.conversation import (
+    ConversationTurn,
+)
+
+from src.api.schemas.conversation import (
+    ConversationCreate,
+    ConversationResponse,
+)
 from src.api.schemas.message import (
     ConversationMessageResponse,
     MessageCreate,
@@ -37,7 +39,6 @@ from src.db.models import (
     Conversation,
     Message,
 )
-
 from src.rag.pipeline import (
     ResolveAIPipeline,
 )
@@ -148,22 +149,17 @@ def list_messages(
 
     statement = (
         select(Message)
-        .where(
-            Message.conversation_id
-            == conversation_id
-        )
+        .where(Message.conversation_id == conversation_id)
         .order_by(
             Message.created_at.asc(),
             Message.id.asc(),
         )
     )
 
-    messages = (
-        db.scalars(statement)
-        .all()
-    )
+    messages = db.scalars(statement).all()
 
     return list(messages)
+
 
 @router.post(
     "/{conversation_id}/messages",
@@ -188,9 +184,35 @@ def send_message(
             detail="Conversation not found.",
         )
 
-    customer_text = (
-        payload.message.strip()
+    customer_text = payload.message.strip()
+
+    history_statement = (
+        select(Message)
+        .where(
+            Message.conversation_id
+            == conversation.id
+        )
+        .order_by(
+            Message.id.desc()
+        )
+        .limit(12)
     )
+
+    recent_messages = list(
+        db.scalars(
+            history_statement
+        ).all()
+    )
+
+    recent_messages.reverse()
+
+    conversation_history = [
+        ConversationTurn(
+            role=item.role,
+            content=item.content,
+        )
+        for item in recent_messages
+    ]
 
     user_message = Message(
         conversation_id=conversation.id,
@@ -202,7 +224,10 @@ def send_message(
 
     try:
         result = pipeline.run(
-            customer_text
+            customer_text,
+            conversation_history=(
+                conversation_history
+            ),
         )
 
     except Exception as exc:
@@ -210,10 +235,7 @@ def send_message(
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "ResolveAI could not process "
-                "the request."
-            ),
+            detail=("ResolveAI could not process the request."),
         ) from exc
 
     assistant_message = Message(
@@ -224,9 +246,7 @@ def send_message(
 
     db.add(assistant_message)
 
-    conversation.updated_at = (
-        datetime.now(timezone.utc)
-    )
+    conversation.updated_at = datetime.now(timezone.utc)
 
     db.commit()
 
@@ -239,31 +259,18 @@ def send_message(
             message=issue.message,
             matched_text=issue.matched_text,
         )
-        for issue
-        in result.validation_issues
+        for issue in result.validation_issues
     ]
 
     metadata = ChatMetadata(
-        retrieved_count=(
-            result.retrieved_count
-        ),
-        verified_knowledge_count=(
-            result.verified_knowledge_count
-        ),
-        verified_knowledge_topics=(
-            result.verified_knowledge_topics
-        ),
-        system_capability_count=(
-            result.system_capability_count
-        ),
-        system_capabilities=(
-            result.system_capabilities
-        ),
+        retrieved_count=(result.retrieved_count),
+        verified_knowledge_count=(result.verified_knowledge_count),
+        verified_knowledge_topics=(result.verified_knowledge_topics),
+        system_capability_count=(result.system_capability_count),
+        system_capabilities=(result.system_capabilities),
         attempts=result.attempts,
         used_fallback=result.used_fallback,
-        retry_trigger_issues=(
-            retry_trigger_issues
-        ),
+        retry_trigger_issues=(retry_trigger_issues),
         provider=result.provider,
         model=result.model,
     )

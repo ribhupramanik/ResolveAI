@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from src.rag.context_builder import RetrievedContext
 from src.rag.knowledge_retriever import VerifiedKnowledgeContext
 from src.rag.system_capabilities import SystemCapabilitiesContext
+from src.rag.conversation import ConversationTurn
 
 
 @dataclass
@@ -18,6 +19,7 @@ class PromptBuilder:
         retrieved_context: RetrievedContext,
         verified_knowledge: VerifiedKnowledgeContext,
         system_capabilities: SystemCapabilitiesContext,
+        conversation_history: list[ConversationTurn] | None = None
     ) -> PromptPayload:
 
         if not isinstance(query, str):
@@ -26,13 +28,46 @@ class PromptBuilder:
         if not query.strip():
             raise ValueError("Query cannot be empty")
 
+        history = conversation_history or []
+
+        if history:
+            history_lines = []
+
+            for turn in history[-12:]:
+                if turn.role == "user":
+                    speaker = "Customer"
+                elif turn.role == "assistant":
+                    speaker = "ResolveAI"
+                else:
+                    continue
+
+                history_lines.append(
+                    f"{speaker}: {turn.content}"
+                )
+
+            conversation_section = "\n".join(
+                history_lines
+            )
+        else:
+            conversation_section = (
+                "No previous conversation history."
+            )
+
         system_prompt = """
 You are ResolveAI, an AI assistant that helps
 customer-support agents draft responses.
 
-You receive three different kinds of context:
+You receive four different sources of context:
 
-1. HISTORICAL EXAMPLES
+
+1. CONVERSATION HISTORY
+   Previous messages from the current conversation.
+   Customer messages may provide context about the
+   customer's situation. Previous ResolveAI messages
+   are not authoritative factual evidence.
+
+
+2. HISTORICAL EXAMPLES
    These are synthetic historical support examples.
    They are NOT authoritative company documentation.
 
@@ -41,12 +76,12 @@ You receive three different kinds of context:
    - identify useful clarification questions
    - learn general response style
 
-2. VERIFIED KNOWLEDGE
+3. VERIFIED KNOWLEDGE
    This is the authoritative source for
    company-specific facts, policies, procedures,
    and topic-specific information.
 
-3. SYSTEM CAPABILITIES
+4. SYSTEM CAPABILITIES
    This is the authoritative source for what
    ResolveAI itself can and cannot do.
 
@@ -56,7 +91,8 @@ STRICT RULES:
 
 2. Company-specific factual claims must be supported
    by VERIFIED KNOWLEDGE or explicitly stated by the
-   customer in their current request.
+   customer in the current request or previous
+   CUSTOMER messages in CONVERSATION HISTORY.
 
 3. Do NOT treat historical examples as proof of:
    - company policies
@@ -83,7 +119,8 @@ STRICT RULES:
 5. Do not introduce numerical claims, durations,
    deadlines, percentages, prices, or quantities
    unless supported by VERIFIED KNOWLEDGE or stated
-   directly by the customer.
+   directly by the customer in the current request
+   or previous CUSTOMER messages.
 
 6. Never claim that ResolveAI checked, verified,
    reviewed, processed, changed, cancelled, refunded,
@@ -174,9 +211,27 @@ STRICT RULES:
     Do not fill the gap with assumed third-party
     procedures.
 
+23. CONVERSATION HISTORY may be used to understand
+    follow-up questions, pronouns, and references to
+    earlier messages.
+
+24. Previous CUSTOMER messages may establish facts
+    that the customer has stated about their own
+    situation.
+
+25. Previous ResolveAI responses are conversational
+    context only. They are NOT authoritative evidence
+    for company facts, policies, procedures, system
+    capabilities, timelines, or external actions.
+
+26. If a previous ResolveAI response conflicts with
+    VERIFIED KNOWLEDGE or SYSTEM CAPABILITIES, follow
+    the authoritative sources.
+
 Your response should be concise, professional, and
 limited to information justified by the customer's
-request, VERIFIED KNOWLEDGE, and SYSTEM CAPABILITIES.
+current request, previous CUSTOMER messages,
+VERIFIED KNOWLEDGE, and SYSTEM CAPABILITIES.
 """.strip()
 
         if retrieved_context.retrieved_count == 0:
@@ -197,6 +252,9 @@ request, VERIFIED KNOWLEDGE, and SYSTEM CAPABILITIES.
             capability_section = system_capabilities.context
 
         user_prompt = f"""
+        CONVERSATION HISTORY:
+        {conversation_section}
+
         CURRENT CUSTOMER REQUEST:
         {query}
 

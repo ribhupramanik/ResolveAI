@@ -6,6 +6,7 @@ from src.rag.knowledge_retriever import KnowledgeRetriever
 from src.rag.prompt_builder import PromptBuilder, PromptPayload
 from src.rag.response_validator import ResponseValidator, ValidationIssue
 from src.rag.system_capabilities import SystemCapabilitiesProvider
+from src.rag.conversation import ConversationTurn
 
 SAFE_FALLBACK = (
      "I'm sorry, but I don't have enough verified information "
@@ -68,27 +69,68 @@ class ResolveAIPipeline:
             else SystemCapabilitiesProvider()
         )
 
-    def run(self, query: str) -> RAGResult:
+    def run(
+        self,
+        query: str,
+        conversation_history: list[
+            ConversationTurn
+        ] | None = None,
+    ) -> RAGResult:
+
         if not isinstance(query, str):
-            raise TypeError("Query must be a string")
+            raise TypeError(
+                "Query must be a string"
+            )
 
         if not query.strip():
-            raise ValueError("Query cannot be empty")
+            raise ValueError(
+                "Query cannot be empty"
+            )
 
-        retrieved_context = self.context_builder.build(query)
+        history = (
+            conversation_history or []
+        )
 
-        verified_knowledge = self.knowledge_retriever.build(query)
+        contextual_query = (
+            self._build_contextual_query(
+                query,
+                history,
+            )
+        )
 
-        system_capabilities = self.system_capabilities_provider.build()
+        retrieved_context = (
+            self.context_builder.build(
+                contextual_query
+            )
+        )
 
-        prompt = self.prompt_builder.build(query, retrieved_context, verified_knowledge, system_capabilities)
+        verified_knowledge = (
+            self.knowledge_retriever.build(
+                contextual_query
+            )
+        )
+
+        system_capabilities = (
+            self.system_capabilities_provider.build()
+        )
+
+        prompt = self.prompt_builder.build(
+            query,
+            retrieved_context,
+            verified_knowledge,
+            system_capabilities,
+            history,
+        )
 
         # First Generation Attempt
 
         first_response = self.generator.generate(prompt)
 
         first_validation = self.validator.validate(
-            first_response.text, query, verified_knowledge, system_capabilities,
+            first_response.text,
+            contextual_query,
+            verified_knowledge,
+            system_capabilities,
         )
 
         if first_validation.is_valid:
@@ -113,7 +155,10 @@ class ResolveAIPipeline:
         second_response = self.generator.generate(retry_prompt)
 
         second_validation = self.validator.validate(
-            second_response.text, query, verified_knowledge, system_capabilities,
+            second_response.text,
+            contextual_query,
+            verified_knowledge,
+            system_capabilities,
         )
 
         if second_validation.is_valid:
@@ -147,6 +192,34 @@ class ResolveAIPipeline:
             attempts=2,
             used_fallback=True,
             validation_issues=all_issues,
+        )
+
+    @staticmethod
+    def _build_contextual_query(
+        query: str,
+        conversation_history: list[
+            ConversationTurn
+        ],
+    ) -> str:
+
+        previous_customer_messages = [
+            turn.content.strip()
+            for turn in conversation_history
+            if (
+                turn.role == "user"
+                and turn.content.strip()
+            )
+        ]
+
+        recent_customer_messages = (
+            previous_customer_messages[-3:]
+        )
+
+        return "\n".join(
+            [
+                *recent_customer_messages,
+                query.strip(),
+            ]
         )
 
     @staticmethod

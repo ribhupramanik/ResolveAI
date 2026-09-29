@@ -96,6 +96,7 @@ class FakePromptBuilder:
         retrieved_context,
         verified_knowledge,
         system_capabilities,
+        conversation_history=None,
     ):
 
         return PromptPayload(
