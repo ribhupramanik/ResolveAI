@@ -16,9 +16,11 @@ function IntelligencePanel({ metadata }) {
 
         {metadata && (
           <>
+            <ToolExecution metadata={metadata} />
+
             <MetadataItem
               label="Knowledge topic"
-              value={metadata.verified_knowledge_topics.join(", ") || "None"}
+              value={metadata.verified_knowledge_topics?.join(", ") || "None"}
             />
 
             <MetadataItem
@@ -29,6 +31,11 @@ function IntelligencePanel({ metadata }) {
             <MetadataItem
               label="Verified knowledge"
               value={metadata.verified_knowledge_count}
+            />
+
+            <MetadataItem
+              label="System capabilities"
+              value={metadata.system_capability_count}
             />
 
             <MetadataItem
@@ -78,6 +85,82 @@ function IntelligencePanel({ metadata }) {
         )}
       </div>
     </aside>
+  );
+}
+
+function ToolExecution({ metadata }) {
+  /*
+   * Older saved conversations may not contain the
+   * tool observability fields yet.
+   */
+  if (metadata.tool_used === undefined) {
+    return (
+      <div>
+        <p className="mb-2 text-xs uppercase tracking-wider text-slate-500">
+          Tool execution
+        </p>
+
+        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+          <p className="text-sm text-slate-400">Not recorded</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!metadata.tool_used) {
+    return (
+      <div>
+        <p className="mb-2 text-xs uppercase tracking-wider text-slate-500">
+          Tool execution
+        </p>
+
+        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+          <p className="text-sm text-slate-300">No tool required</p>
+
+          <p className="mt-1 text-xs text-slate-500">
+            ResolveAI answered without executing an operational tool.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const succeeded = metadata.tool_success === true;
+
+  return (
+    <div>
+      <p className="mb-2 text-xs uppercase tracking-wider text-slate-500">
+        Tool execution
+      </p>
+
+      <div
+        className={`rounded-lg border p-3 ${
+          succeeded
+            ? "border-emerald-900/50 bg-emerald-950/20"
+            : "border-rose-900/50 bg-rose-950/20"
+        }`}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs text-slate-500">Tool</p>
+
+            <p className="mt-1 text-sm font-medium text-slate-200">
+              {metadata.tool_name || "Unknown"}
+            </p>
+          </div>
+
+          <span
+            className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+              succeeded
+                ? "bg-emerald-500/10 text-emerald-300"
+                : "bg-rose-500/10 text-rose-300"
+            }`}
+          >
+            {succeeded ? "Success" : "Failed"}
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }
 
