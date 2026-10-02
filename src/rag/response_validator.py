@@ -430,6 +430,16 @@ class ResponseValidator:
         ),
     ]
 
+    LOOKED_UP_PATTERN = re.compile(
+    r"\b(?:"
+    r"(?:i|we)\s+have\s+"
+    r"|"
+    r"(?:i|we)['’]ve\s+"
+    r")"
+    r"looked\s+up\b",
+    re.IGNORECASE,
+)
+
     CURRENCY_SYMBOL_TO_CODE = {
         "₹": "inr",
         "$": "usd",
@@ -508,6 +518,7 @@ class ResponseValidator:
         self._check_action_claims(
             response_text,
             issues,
+            operational_context=operational_context,
         )
 
         self._check_support_route_claims(
@@ -553,9 +564,36 @@ class ResponseValidator:
         self,
         response_text: str,
         issues: list[ValidationIssue],
+        operational_context: OperationalContext | None = None,
     ) -> None:
 
         seen_matches = set()
+
+        for match in self.LOOKED_UP_PATTERN.finditer(
+            response_text
+        ):
+            lookup_was_successful = (
+                operational_context is not None
+                and operational_context.tool_used
+                and operational_context.tool_name == "get_order"
+                and operational_context.tool_success
+            )
+
+            if lookup_was_successful:
+                continue
+
+            issues.append(
+                ValidationIssue(
+                    code="unsupported_action_claim",
+                    message=(
+                        "Response claims that ResolveAI "
+                        "looked up operational data, but "
+                        "no successful order lookup "
+                        "supports that claim."
+                    ),
+                    matched_text=match.group(0),
+                )
+            )
 
         for pattern in self.ACTION_PATTERNS:
             for match in pattern.finditer(response_text):
