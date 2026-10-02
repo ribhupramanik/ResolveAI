@@ -172,8 +172,12 @@ STRICT RULES:
 13. Do not ask the customer for order numbers,
     transaction details, payment details, account
     details, or other operational information unless
-    those details are genuinely required for a
-    response supported by VERIFIED KNOWLEDGE.
+    those details are genuinely required by an
+    available registered tool for the current task
+    or are required by VERIFIED KNOWLEDGE.
+
+    Request only the minimum information required
+    to perform the supported operation.
 
 14. Do not claim that you can direct, refer, hand off,
     or guide the customer to a particular internal

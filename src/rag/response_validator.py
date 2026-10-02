@@ -1,5 +1,9 @@
 import re
 from dataclasses import dataclass
+from decimal import (
+    Decimal,
+    InvalidOperation,
+)
 
 from src.rag.knowledge_retriever import (
     VerifiedKnowledgeContext,
@@ -9,11 +13,6 @@ from src.rag.operational_context import (
 )
 from src.rag.system_capabilities import (
     SystemCapabilitiesContext,
-)
-
-from decimal import (
-    Decimal,
-    InvalidOperation,
 )
 
 
@@ -431,14 +430,14 @@ class ResponseValidator:
     ]
 
     LOOKED_UP_PATTERN = re.compile(
-    r"\b(?:"
-    r"(?:i|we)\s+have\s+"
-    r"|"
-    r"(?:i|we)['’]ve\s+"
-    r")"
-    r"looked\s+up\b",
-    re.IGNORECASE,
-)
+        r"\b(?:"
+        r"(?:i|we)\s+have\s+"
+        r"|"
+        r"(?:i|we)['’]ve\s+"
+        r")"
+        r"looked\s+up\b",
+        re.IGNORECASE,
+    )
 
     CURRENCY_SYMBOL_TO_CODE = {
         "₹": "inr",
@@ -569,9 +568,7 @@ class ResponseValidator:
 
         seen_matches = set()
 
-        for match in self.LOOKED_UP_PATTERN.finditer(
-            response_text
-        ):
+        for match in self.LOOKED_UP_PATTERN.finditer(response_text):
             lookup_was_successful = (
                 operational_context is not None
                 and operational_context.tool_used
@@ -706,9 +703,7 @@ class ResponseValidator:
         for match in self.NUMERIC_CLAIM_PATTERN.finditer(response_text):
             claim = match.group(0)
 
-            normalized_claim = self._normalize_text(
-                claim
-            )
+            normalized_claim = self._normalize_text(claim)
 
             if normalized_claim in normalized_evidence:
                 continue
@@ -732,7 +727,6 @@ class ResponseValidator:
                 )
             )
 
-
     @classmethod
     def _currency_claim_is_supported(
         cls,
@@ -741,22 +735,14 @@ class ResponseValidator:
     ) -> bool:
 
         currency_symbol = next(
-            (
-                symbol
-                for symbol in cls.CURRENCY_SYMBOL_TO_CODE
-                if symbol in claim
-            ),
+            (symbol for symbol in cls.CURRENCY_SYMBOL_TO_CODE if symbol in claim),
             None,
         )
 
         if currency_symbol is None:
             return False
 
-        currency_code = (
-            cls.CURRENCY_SYMBOL_TO_CODE[
-                currency_symbol
-            ]
-        )
+        currency_code = cls.CURRENCY_SYMBOL_TO_CODE[currency_symbol]
 
         amount_match = re.search(
             r"\d+(?:\.\d+)?",
@@ -767,9 +753,7 @@ class ResponseValidator:
             return False
 
         try:
-            claim_amount = Decimal(
-                amount_match.group(0)
-            )
+            claim_amount = Decimal(amount_match.group(0))
         except InvalidOperation:
             return False
 
@@ -782,15 +766,11 @@ class ResponseValidator:
 
         for value in evidence_amount_matches:
             try:
-                evidence_amounts.append(
-                    Decimal(value)
-                )
+                evidence_amounts.append(Decimal(value))
             except InvalidOperation:
                 continue
 
-        amount_is_supported = (
-            claim_amount in evidence_amounts
-        )
+        amount_is_supported = claim_amount in evidence_amounts
 
         currency_is_supported = bool(
             re.search(
@@ -799,11 +779,7 @@ class ResponseValidator:
             )
         )
 
-        return (
-            amount_is_supported
-            and currency_is_supported
-        )
-
+        return amount_is_supported and currency_is_supported
 
     @staticmethod
     def _normalize_text(

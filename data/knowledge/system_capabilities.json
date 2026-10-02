@@ -10,6 +10,11 @@
     "content": "ResolveAI can perform read-only order lookup by order number through the registered get_order tool. The tool may return order status, payment status, total amount, currency, carrier, tracking number, and estimated delivery date when available."
   },
   {
+    "capability": "order_cancellation_eligibility",
+    "available": true,
+    "content": "ResolveAI can perform a read-only cancellation-eligibility check by order number through the registered check_cancellation_eligibility tool. This check does not cancel or modify the order. An eligible result does not mean that a cancellation has been performed."
+  },
+  {
     "capability": "external_action_execution",
     "available": false,
     "content": "ResolveAI cannot modify, cancel, refund, update, submit, send, forward, route, escalate, or otherwise perform actions in external systems."
