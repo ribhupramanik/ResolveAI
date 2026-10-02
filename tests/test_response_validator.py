@@ -3,6 +3,9 @@ import pytest
 from src.rag.knowledge_retriever import (
     VerifiedKnowledgeContext,
 )
+from src.rag.operational_context import (
+    OperationalContext,
+)
 from src.rag.response_validator import (
     ResponseValidator,
 )
@@ -293,14 +296,8 @@ def test_unsupported_action_claims_are_detected(
             "You may want to contact the support team "
             "that handled your original purchase."
         ),
-        (
-            "Please reach out to customer support "
-            "for more information."
-        ),
-        (
-            "You can visit the help center "
-            "for assistance."
-        ),
+        ("Please reach out to customer support for more information."),
+        ("You can visit the help center for assistance."),
     ],
 )
 def test_unsupported_support_routes_are_detected(
@@ -320,35 +317,18 @@ def test_unsupported_support_routes_are_detected(
     assert not result.is_valid
 
     assert any(
-        issue.code
-        == "unsupported_support_route_claim"
-        for issue in result.issues
+        issue.code == "unsupported_support_route_claim" for issue in result.issues
     )
 
 
 @pytest.mark.parametrize(
     "response",
     [
-        (
-            "You may want to contact your bank "
-            "for more information."
-        ),
-        (
-            "Please contact the merchant "
-            "about the refund."
-        ),
-        (
-            "You may want to reach out directly "
-            "to the merchant for more information."
-        ),
-        (
-            "You can check with your bank "
-            "about the transaction."
-        ),
-        (
-            "You may want to check with the party "
-            "that processed the refund directly."
-        ),
+        ("You may want to contact your bank for more information."),
+        ("Please contact the merchant about the refund."),
+        ("You may want to reach out directly to the merchant for more information."),
+        ("You can check with your bank about the transaction."),
+        ("You may want to check with the party that processed the refund directly."),
     ],
 )
 def test_unsupported_third_party_claims_are_detected(
@@ -367,44 +347,19 @@ def test_unsupported_third_party_claims_are_detected(
 
     assert not result.is_valid
 
-    assert any(
-        issue.code
-        == "unsupported_third_party_claim"
-        for issue in result.issues
-    )
+    assert any(issue.code == "unsupported_third_party_claim" for issue in result.issues)
 
 
 @pytest.mark.parametrize(
     "response",
     [
-        (
-            "Please contact the company's "
-            "customer support directly."
-        ),
-        (
-            "You may want to contact their "
-            "customer support directly."
-        ),
-        (
-            "You may want to check the company's "
-            "official website."
-        ),
-        (
-            "You may want to check any official "
-            "help resources."
-        ),
-        (
-            "Try contacting the company through "
-            "their official website."
-        ),
-        (
-            "Please use their customer-support "
-            "phone number."
-        ),
-        (
-            "Contact their customer support "
-            "through their official channels."
-        ),
+        ("Please contact the company's customer support directly."),
+        ("You may want to contact their customer support directly."),
+        ("You may want to check the company's official website."),
+        ("You may want to check any official help resources."),
+        ("Try contacting the company through their official website."),
+        ("Please use their customer-support phone number."),
+        ("Contact their customer support through their official channels."),
         (
             "You may want to check any available "
             "customer support resources that the "
@@ -443,10 +398,9 @@ def test_unverified_support_routes_from_rag_eval_are_detected(
     assert not result.is_valid
 
     assert any(
-        issue.code
-        == "unsupported_support_route_claim"
-        for issue in result.issues
+        issue.code == "unsupported_support_route_claim" for issue in result.issues
     )
+
 
 def test_negative_support_route_statement_is_allowed(
     validator,
@@ -454,10 +408,7 @@ def test_negative_support_route_statement_is_allowed(
     system_capabilities,
 ):
 
-    response = (
-        "No verified customer-support route "
-        "is currently available."
-    )
+    response = "No verified customer-support route is currently available."
 
     result = validator.validate(
         response,
@@ -467,3 +418,134 @@ def test_negative_support_route_statement_is_allowed(
     )
 
     assert result.is_valid
+
+
+def test_numeric_claim_from_successful_operational_data_is_allowed(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    operational_context = OperationalContext(
+        context=(
+            "Tool: get_order\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- total_amount: 2499.00\n"
+            "- currency: INR\n"
+            "- estimated_delivery: 2026-10-04"
+        ),
+        tool_used=True,
+        tool_name="get_order",
+        tool_success=True,
+    )
+
+    result = validator.validate(
+        response_text="The order total is ₹2499.00.",
+        query="Where is my order?",
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+        operational_context=operational_context,
+    )
+
+    assert result.is_valid
+
+def test_wrong_currency_from_operational_data_is_rejected(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    operational_context = OperationalContext(
+        context=(
+            "Tool: get_order\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- total_amount: 2499.00\n"
+            "- currency: INR"
+        ),
+        tool_used=True,
+        tool_name="get_order",
+        tool_success=True,
+    )
+
+    result = validator.validate(
+        response_text=(
+            "The order total is $2499.00."
+        ),
+        query="What is my order total?",
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+        operational_context=operational_context,
+    )
+
+    assert not result.is_valid
+
+    assert any(
+        issue.code
+        == "unsupported_numeric_claim"
+        for issue in result.issues
+    )
+
+def test_wrong_amount_from_operational_data_is_rejected(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    operational_context = OperationalContext(
+        context=(
+            "Tool: get_order\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- total_amount: 2499.00\n"
+            "- currency: INR"
+        ),
+        tool_used=True,
+        tool_name="get_order",
+        tool_success=True,
+    )
+
+    result = validator.validate(
+        response_text=(
+            "The order total is ₹3999.00."
+        ),
+        query="What is my order total?",
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+        operational_context=operational_context,
+    )
+
+    assert not result.is_valid
+
+    assert any(
+        issue.code
+        == "unsupported_numeric_claim"
+        for issue in result.issues
+    )
+
+def test_numeric_claim_from_failed_operational_data_is_rejected(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    operational_context = OperationalContext(
+        context=(
+            "Tool: get_order\n"
+            "Tool status: failed\n"
+            "Data: {'order_number': 'ORD-10001'}\n"
+            "Error: Order lookup failed."
+        ),
+        tool_used=True,
+        tool_name="get_order",
+        tool_success=False,
+    )
+
+    result = validator.validate(
+        response_text="The order total is ₹2499.00.",
+        query="Where is my order?",
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+        operational_context=operational_context,
+    )
+
+    assert not result.is_valid
+
+    assert any(issue.code == "unsupported_numeric_claim" for issue in result.issues)

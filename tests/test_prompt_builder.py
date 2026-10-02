@@ -6,6 +6,9 @@ from src.rag.context_builder import (
 from src.rag.knowledge_retriever import (
     VerifiedKnowledgeContext,
 )
+from src.rag.operational_context import (
+    OperationalContext,
+)
 from src.rag.prompt_builder import (
     PromptBuilder,
     PromptPayload,
@@ -282,6 +285,7 @@ def test_user_prompt_contains_system_capabilities(
 
     assert "human_support_routing" in result.user_prompt
 
+
 def test_no_system_capabilities_fallback(
     prompt_builder,
     sample_context,
@@ -301,7 +305,52 @@ def test_no_system_capabilities_fallback(
         empty_capabilities,
     )
 
-    assert (
-        "No system capability information is available."
-        in result.user_prompt
+    assert "No system capability information is available." in result.user_prompt
+
+
+def test_user_prompt_contains_operational_data(
+    prompt_builder,
+    sample_context,
+    verified_knowledge,
+    system_capabilities,
+):
+    operational_context = OperationalContext(
+        context=(
+            "Tool: get_order\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- order_number: ORD-10001\n"
+            "- status: shipped"
+        ),
+        tool_used=True,
+        tool_name="get_order",
+        tool_success=True,
     )
+
+    result = prompt_builder.build(
+        query="Where is ORD-10001?",
+        retrieved_context=sample_context,
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+        operational_context=operational_context,
+    )
+
+    assert "OPERATIONAL DATA:" in result.user_prompt
+    assert "ORD-10001" in result.user_prompt
+    assert "status: shipped" in result.user_prompt
+
+
+def test_no_operational_data_fallback(
+    prompt_builder,
+    sample_context,
+    verified_knowledge,
+    system_capabilities,
+):
+    result = prompt_builder.build(
+        query="How do I reset my password?",
+        retrieved_context=sample_context,
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+    )
+
+    assert "No operational tool was used for this request." in result.user_prompt

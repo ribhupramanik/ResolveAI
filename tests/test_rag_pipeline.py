@@ -97,6 +97,7 @@ class FakePromptBuilder:
         verified_knowledge,
         system_capabilities,
         conversation_history=None,
+        operational_context=None,
     ):
 
         return PromptPayload(
@@ -129,6 +130,17 @@ class SequenceGenerator:
             provider="fake",
         )
 
+class FakeToolRouter:
+    def __init__(self, result=None):
+        self.result = result
+
+    def run(
+        self,
+        query,
+        conversation_history=None,
+    ):
+        return self.result
+
 
 def create_pipeline(
     responses,
@@ -141,6 +153,7 @@ def create_pipeline(
         system_capabilities_provider=FakeSystemCapabilitiesProvider(),
         prompt_builder=FakePromptBuilder(),
         validator=ResponseValidator(),
+        tool_router=FakeToolRouter(),
     )
 
 

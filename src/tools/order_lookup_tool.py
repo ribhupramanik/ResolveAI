@@ -55,15 +55,14 @@ class OrderLookupTool:
                 },
             )
 
-        except Exception as exc:
+        except Exception:
             return ToolResult(
                 tool_name=self.name,
                 success=False,
                 data={
                     "order_number": order_number,
                 },
-                error=str(exc),
+                error="Order lookup failed.",
             )
-
         finally:
             db.close()

@@ -2,7 +2,12 @@
   {
     "capability": "live_operational_data_access",
     "available": false,
-    "content": "ResolveAI has no live integration for accessing customer account data, order status, refund status, payment status, shipment status, or transaction information."
+    "content": "ResolveAI does not have unrestricted access to live customer operational data. It may access specific operational data only through explicitly registered tools available at runtime."
+  },
+  {
+    "capability": "order_lookup",
+    "available": true,
+    "content": "ResolveAI can perform read-only order lookup by order number through the registered get_order tool. The tool may return order status, payment status, total amount, currency, carrier, tracking number, and estimated delivery date when available."
   },
   {
     "capability": "external_action_execution",
