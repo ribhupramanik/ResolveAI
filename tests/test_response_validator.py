@@ -703,4 +703,67 @@ def test_looked_up_claim_without_tool_is_rejected(
         issue.code == "unsupported_action_claim"
         for issue in result.issues
     )
-    
+
+def test_successful_eligibility_check_allows_checked_claim(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    operational_context = OperationalContext(
+        context=(
+            "Tool: check_cancellation_eligibility\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- order_number: ORD-10002\n"
+            "- eligible: True"
+        ),
+        tool_used=True,
+        tool_name="check_cancellation_eligibility",
+        tool_success=True,
+    )
+
+    result = validator.validate(
+        response_text=(
+            "I've checked the cancellation eligibility. "
+            "ORD-10002 is eligible for cancellation."
+        ),
+        query="Can I cancel ORD-10002?",
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+        operational_context=operational_context,
+    )
+
+    assert result.is_valid
+
+def test_failed_eligibility_check_rejects_checked_claim(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    operational_context = OperationalContext(
+        context=(
+            "Tool: check_cancellation_eligibility\n"
+            "Tool status: failed\n"
+            "Error: Order not found."
+        ),
+        tool_used=True,
+        tool_name="check_cancellation_eligibility",
+        tool_success=False,
+    )
+
+    result = validator.validate(
+        response_text=(
+            "I've checked the cancellation eligibility."
+        ),
+        query="Can I cancel ORD-99999?",
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+        operational_context=operational_context,
+    )
+
+    assert not result.is_valid
+
+    assert any(
+        issue.code == "unsupported_action_claim"
+        for issue in result.issues
+    )

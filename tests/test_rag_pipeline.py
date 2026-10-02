@@ -22,7 +22,6 @@ from src.rag.response_validator import (
 from src.rag.system_capabilities import (
     SystemCapabilitiesContext,
 )
-
 from src.tools.base import (
     ToolResult,
 )
@@ -138,6 +137,7 @@ class SequenceGenerator:
             provider="fake",
         )
 
+
 class FakeToolRouter:
     def __init__(self, result=None):
         self.result = result
@@ -155,11 +155,7 @@ def create_pipeline(
     tool_result=None,
     prompt_builder=None,
 ):
-    builder = (
-        prompt_builder
-        if prompt_builder is not None
-        else FakePromptBuilder()
-    )
+    builder = prompt_builder if prompt_builder is not None else FakePromptBuilder()
 
     return ResolveAIPipeline(
         generator=SequenceGenerator(responses),
@@ -275,19 +271,16 @@ def test_successful_tool_metadata_is_returned():
     )
 
     pipeline = create_pipeline(
-        responses=[
-            "Order ORD-10001 is currently shipped."
-        ],
+        responses=["Order ORD-10001 is currently shipped."],
         tool_result=tool_result,
     )
 
-    result = pipeline.run(
-        "Where is order ORD-10001?"
-    )
+    result = pipeline.run("Where is order ORD-10001?")
 
     assert result.tool_used is True
     assert result.tool_name == "get_order"
     assert result.tool_success is True
+
 
 def test_failed_tool_metadata_is_returned():
     tool_result = ToolResult(
@@ -301,19 +294,16 @@ def test_failed_tool_metadata_is_returned():
     )
 
     pipeline = create_pipeline(
-        responses=[
-            "Order ORD-99999 could not be found."
-        ],
+        responses=["Order ORD-99999 could not be found."],
         tool_result=tool_result,
     )
 
-    result = pipeline.run(
-        "Where is order ORD-99999?"
-    )
+    result = pipeline.run("Where is order ORD-99999?")
 
     assert result.tool_used is True
     assert result.tool_name == "get_order"
     assert result.tool_success is False
+
 
 def test_cancellation_eligibility_reaches_pipeline():
     tool_result = ToolResult(
@@ -325,8 +315,7 @@ def test_cancellation_eligibility_reaches_pipeline():
             "status": "processing",
             "eligible": True,
             "reason": (
-                "The order is still processing "
-                "and is eligible for cancellation."
+                "The order is still processing and is eligible for cancellation."
             ),
             "requires_confirmation": True,
             "action_performed": False,
@@ -347,51 +336,29 @@ def test_cancellation_eligibility_reaches_pipeline():
         prompt_builder=prompt_builder,
     )
 
-    result = pipeline.run(
-        "Can I cancel ORD-10002?"
-    )
+    result = pipeline.run("Can I cancel ORD-10002?")
 
     assert result.tool_used is True
 
-    assert (
-        result.tool_name
-        == "check_cancellation_eligibility"
-    )
+    assert result.tool_name == "check_cancellation_eligibility"
 
     assert result.tool_success is True
 
-    assert (
-        prompt_builder.last_operational_context
-        is not None
-    )
+    assert prompt_builder.last_operational_context is not None
 
-    operational_context = (
-        prompt_builder.last_operational_context
-    )
+    operational_context = prompt_builder.last_operational_context
 
     assert operational_context.tool_used is True
 
-    assert (
-        operational_context.tool_name
-        == "check_cancellation_eligibility"
-    )
+    assert operational_context.tool_name == "check_cancellation_eligibility"
 
     assert operational_context.tool_success is True
 
-    assert (
-        "ORD-10002"
-        in operational_context.context
-    )
+    assert "ORD-10002" in operational_context.context
 
-    assert (
-        "eligible"
-        in operational_context.context
-    )
+    assert "eligible" in operational_context.context
 
-    assert (
-        "action_performed"
-        in operational_context.context
-    )
+    assert "action_performed" in operational_context.context
 
 
 def test_ineligible_order_is_still_successful_tool_execution():
@@ -403,9 +370,7 @@ def test_ineligible_order_is_still_successful_tool_execution():
             "order_number": "ORD-10001",
             "status": "shipped",
             "eligible": False,
-            "reason": (
-                "The order has already shipped."
-            ),
+            "reason": ("The order has already shipped."),
             "requires_confirmation": False,
             "action_performed": False,
         },
@@ -422,16 +387,11 @@ def test_ineligible_order_is_still_successful_tool_execution():
         tool_result=tool_result,
     )
 
-    result = pipeline.run(
-        "Can I cancel ORD-10001?"
-    )
+    result = pipeline.run("Can I cancel ORD-10001?")
 
     assert result.tool_used is True
 
-    assert (
-        result.tool_name
-        == "check_cancellation_eligibility"
-    )
+    assert result.tool_name == "check_cancellation_eligibility"
 
     assert result.tool_success is True
     assert result.used_fallback is False
@@ -449,21 +409,14 @@ def test_cancellation_eligibility_not_found_is_failed_tool():
     )
 
     pipeline = create_pipeline(
-        responses=[
-            "Order ORD-99999 could not be found."
-        ],
+        responses=["Order ORD-99999 could not be found."],
         tool_result=tool_result,
     )
 
-    result = pipeline.run(
-        "Can I cancel ORD-99999?"
-    )
+    result = pipeline.run("Can I cancel ORD-99999?")
 
     assert result.tool_used is True
 
-    assert (
-        result.tool_name
-        == "check_cancellation_eligibility"
-    )
+    assert result.tool_name == "check_cancellation_eligibility"
 
     assert result.tool_success is False

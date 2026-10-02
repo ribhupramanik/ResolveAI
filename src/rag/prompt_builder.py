@@ -35,6 +35,40 @@ class PromptBuilder:
         else:
             operational_section = operational_context.context
 
+        if (
+            operational_context is not None
+            and operational_context.tool_name == "check_cancellation_eligibility"
+        ):
+            operational_guidance = """
+        For cancellation-eligibility results:
+
+        - Report the eligibility result exactly as supported by
+        OPERATIONAL DATA.
+
+        - If eligible is true, explain that the order is eligible
+        for cancellation.
+
+        - If eligible is false, explain that the order is not
+        eligible and use the provided reason when available.
+
+        - action_performed=false means no cancellation or other
+        modification has been made.
+
+        - Do not claim that the order has been cancelled.
+
+        - Do not recommend contacting customer support, a help
+        center, a department, or another support route unless
+        VERIFIED KNOWLEDGE explicitly provides that route.
+
+        - Do not invent an alternative cancellation procedure.
+
+        - At this stage, do not offer to perform the cancellation.
+        Only report eligibility and that no action has been
+        performed.
+        """.strip()
+        else:
+            operational_guidance = "No additional tool-specific guidance."
+
         history = conversation_history or []
 
         if history:

@@ -598,6 +598,21 @@ class ResponseValidator:
 
                 normalized = matched_text.lower().strip()
 
+                read_only_check_is_supported = (
+                    "checked" in normalized
+                    and operational_context is not None
+                    and operational_context.tool_used
+                    and operational_context.tool_success
+                    and operational_context.tool_name
+                    in {
+                        "get_order",
+                        "check_cancellation_eligibility",
+                    }
+                )
+
+                if read_only_check_is_supported:
+                    continue
+
                 if normalized in seen_matches:
                     continue
 
