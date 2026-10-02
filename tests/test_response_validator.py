@@ -298,6 +298,7 @@ def test_unsupported_action_claims_are_detected(
         ),
         ("Please reach out to customer support for more information."),
         ("You can visit the help center for assistance."),
+        ("Please contact the relevant support channel."),
     ],
 )
 def test_unsupported_support_routes_are_detected(
@@ -306,7 +307,6 @@ def test_unsupported_support_routes_are_detected(
     system_capabilities,
     response,
 ):
-
     result = validator.validate(
         response,
         "where is my refund",
@@ -749,6 +749,10 @@ def test_failed_eligibility_check_rejects_checked_claim(
         ("Use the order-management features on our platform."),
         ("Log into your account and select the cancellation option."),
         ("Check your order confirmation email for cancellation instructions."),
+        (
+            "You would need to use the cancellation process "
+            "available through your account."
+        ),
     ],
 )
 def test_unverified_cancellation_procedure_is_rejected(

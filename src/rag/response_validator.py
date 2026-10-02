@@ -352,7 +352,16 @@ class ResponseValidator:
             r")\b",
             re.IGNORECASE,
         ),
+        re.compile(
+            r"\b(?:contact|reach\s+out\s+to)\s+"
+            r"(?:the\s+)?"
+            r"(?:relevant|appropriate)\s+"
+            r"support\s+"
+            r"(?:channel|team|department)\b",
+            re.IGNORECASE,
+        ),
     ]
+
     THIRD_PARTY_PATTERNS = [  # noqa: RUF012
         # contact merchant/bank/payment provider/courier
         re.compile(
@@ -471,9 +480,20 @@ class ResponseValidator:
             r"\border\s+confirmation\s+email\b",
             re.IGNORECASE,
         ),
+        re.compile(
+            r"\b(?:use|follow|go\s+through)\s+"
+            r"(?:the\s+)?"
+            r"cancellation\s+"
+            r"(?:process|procedure|workflow)\s+"
+            r"(?:available\s+)?"
+            r"(?:through|via|in|on)\s+"
+            r"(?:your\s+|the\s+)?"
+            r"account\b",
+            re.IGNORECASE,
+        ),
     ]
 
-    CURRENCY_SYMBOL_TO_CODE = {
+    CURRENCY_SYMBOL_TO_CODE = {  # noqa: RUF012
         "₹": "inr",
         "$": "usd",
         "€": "eur",
