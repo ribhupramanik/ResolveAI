@@ -449,6 +449,7 @@ def test_numeric_claim_from_successful_operational_data_is_allowed(
 
     assert result.is_valid
 
+
 def test_wrong_currency_from_operational_data_is_rejected(
     validator,
     verified_knowledge,
@@ -468,9 +469,7 @@ def test_wrong_currency_from_operational_data_is_rejected(
     )
 
     result = validator.validate(
-        response_text=(
-            "The order total is $2499.00."
-        ),
+        response_text=("The order total is $2499.00."),
         query="What is my order total?",
         verified_knowledge=verified_knowledge,
         system_capabilities=system_capabilities,
@@ -479,11 +478,8 @@ def test_wrong_currency_from_operational_data_is_rejected(
 
     assert not result.is_valid
 
-    assert any(
-        issue.code
-        == "unsupported_numeric_claim"
-        for issue in result.issues
-    )
+    assert any(issue.code == "unsupported_numeric_claim" for issue in result.issues)
+
 
 def test_wrong_amount_from_operational_data_is_rejected(
     validator,
@@ -504,9 +500,7 @@ def test_wrong_amount_from_operational_data_is_rejected(
     )
 
     result = validator.validate(
-        response_text=(
-            "The order total is ₹3999.00."
-        ),
+        response_text=("The order total is ₹3999.00."),
         query="What is my order total?",
         verified_knowledge=verified_knowledge,
         system_capabilities=system_capabilities,
@@ -515,11 +509,8 @@ def test_wrong_amount_from_operational_data_is_rejected(
 
     assert not result.is_valid
 
-    assert any(
-        issue.code
-        == "unsupported_numeric_claim"
-        for issue in result.issues
-    )
+    assert any(issue.code == "unsupported_numeric_claim" for issue in result.issues)
+
 
 def test_numeric_claim_from_failed_operational_data_is_rejected(
     validator,
@@ -584,10 +575,8 @@ def test_unverified_tracking_website_is_rejected(
 
     assert not result.is_valid
 
-    assert any(
-        issue.code == "unsupported_third_party_claim"
-        for issue in result.issues
-    )
+    assert any(issue.code == "unsupported_third_party_claim" for issue in result.issues)
+
 
 def test_grounded_tracking_details_are_allowed(
     validator,
@@ -609,8 +598,7 @@ def test_grounded_tracking_details_are_allowed(
 
     result = validator.validate(
         response_text=(
-            "The carrier is DemoShip and the tracking "
-            "number is DSH10001001."
+            "The carrier is DemoShip and the tracking number is DSH10001001."
         ),
         query="Where is order ORD-10001?",
         verified_knowledge=verified_knowledge,
@@ -640,10 +628,7 @@ def test_successful_order_lookup_allows_looked_up_claim(
     )
 
     result = validator.validate(
-        response_text=(
-            "I've looked up your order. "
-            "It is currently shipped."
-        ),
+        response_text=("I've looked up your order. It is currently shipped."),
         query="Where is ORD-10001?",
         verified_knowledge=verified_knowledge,
         system_capabilities=system_capabilities,
@@ -659,11 +644,7 @@ def test_failed_order_lookup_rejects_looked_up_claim(
     system_capabilities,
 ):
     operational_context = OperationalContext(
-        context=(
-            "Tool: get_order\n"
-            "Tool status: failed\n"
-            "Error: Order not found."
-        ),
+        context=("Tool: get_order\nTool status: failed\nError: Order not found."),
         tool_used=True,
         tool_name="get_order",
         tool_success=False,
@@ -679,10 +660,7 @@ def test_failed_order_lookup_rejects_looked_up_claim(
 
     assert not result.is_valid
 
-    assert any(
-        issue.code == "unsupported_action_claim"
-        for issue in result.issues
-    )
+    assert any(issue.code == "unsupported_action_claim" for issue in result.issues)
 
 
 def test_looked_up_claim_without_tool_is_rejected(
@@ -699,10 +677,8 @@ def test_looked_up_claim_without_tool_is_rejected(
 
     assert not result.is_valid
 
-    assert any(
-        issue.code == "unsupported_action_claim"
-        for issue in result.issues
-    )
+    assert any(issue.code == "unsupported_action_claim" for issue in result.issues)
+
 
 def test_successful_eligibility_check_allows_checked_claim(
     validator,
@@ -735,6 +711,7 @@ def test_successful_eligibility_check_allows_checked_claim(
 
     assert result.is_valid
 
+
 def test_failed_eligibility_check_rejects_checked_claim(
     validator,
     verified_knowledge,
@@ -752,9 +729,7 @@ def test_failed_eligibility_check_rejects_checked_claim(
     )
 
     result = validator.validate(
-        response_text=(
-            "I've checked the cancellation eligibility."
-        ),
+        response_text=("I've checked the cancellation eligibility."),
         query="Can I cancel ORD-99999?",
         verified_knowledge=verified_knowledge,
         system_capabilities=system_capabilities,
@@ -763,7 +738,71 @@ def test_failed_eligibility_check_rejects_checked_claim(
 
     assert not result.is_valid
 
+    assert any(issue.code == "unsupported_action_claim" for issue in result.issues)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        ("Please confirm the request through the channel you used to place the order."),
+        ("You can use your account portal to cancel the order."),
+        ("Use the order-management features on our platform."),
+        ("Log into your account and select the cancellation option."),
+        ("Check your order confirmation email for cancellation instructions."),
+    ],
+)
+def test_unverified_cancellation_procedure_is_rejected(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+    response,
+):
+    result = validator.validate(
+        response_text=response,
+        query="Can I cancel ORD-10002?",
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+    )
+
+    assert not result.is_valid
+
     assert any(
-        issue.code == "unsupported_action_claim"
+        issue.code == "unsupported_cancellation_procedure_claim"
         for issue in result.issues
     )
+
+
+def test_grounded_cancellation_eligibility_response_is_allowed(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    operational_context = OperationalContext(
+        context=(
+            "Tool: check_cancellation_eligibility\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- order_number: ORD-10002\n"
+            "- status: processing\n"
+            "- eligible: True\n"
+            "- requires_confirmation: True\n"
+            "- action_performed: False"
+        ),
+        tool_used=True,
+        tool_name=("check_cancellation_eligibility"),
+        tool_success=True,
+    )
+
+    result = validator.validate(
+        response_text=(
+            "ORD-10002 is eligible for cancellation "
+            "because it is still processing. "
+            "No cancellation has been performed."
+        ),
+        query="Can I cancel ORD-10002?",
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+        operational_context=operational_context,
+    )
+
+    assert result.is_valid

@@ -62,6 +62,12 @@ class PromptBuilder:
 
         - Do not invent an alternative cancellation procedure.
 
+        - Do not tell the customer where or how to cancel the
+        order. Do not mention account portals, order-management
+        pages, cancellation buttons, confirmation emails,
+        websites, apps, or support channels unless explicitly
+        provided by authoritative evidence.
+
         - At this stage, do not offer to perform the cancellation.
         Only report eligibility and that no action has been
         performed.
@@ -361,6 +367,9 @@ successful OPERATIONAL DATA.
 
         OPERATIONAL DATA:
         {operational_section}
+
+        TOOL-SPECIFIC GUIDANCE:
+        {operational_guidance}
 
         TASK:
         Draft a customer-support response for the current

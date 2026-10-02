@@ -439,6 +439,40 @@ class ResponseValidator:
         re.IGNORECASE,
     )
 
+    CANCELLATION_PROCEDURE_PATTERNS = [  # noqa: RUF012
+        re.compile(
+            r"\b(?:use|open|visit|go\s+to)\s+"
+            r"(?:the\s+|your\s+|our\s+)?"
+            r"(?:"
+            r"order[- ]management\s+(?:features?|page|portal)"
+            r"|account\s+(?:portal|page)"
+            r"|cancellation\s+(?:option|page|portal)"
+            r")\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\b(?:log|sign)\s+in(?:to)?\s+"
+            r"(?:your\s+|the\s+)?account\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bselect(?:ing)?\s+"
+            r"(?:the\s+)?cancellation\s+option\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bconfirm\s+(?:the\s+)?"
+            r"(?:cancellation\s+)?request\s+"
+            r"(?:through|via|using)\s+"
+            r"(?:the\s+)?channel\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\border\s+confirmation\s+email\b",
+            re.IGNORECASE,
+        ),
+    ]
+
     CURRENCY_SYMBOL_TO_CODE = {
         "₹": "inr",
         "$": "usd",
@@ -537,6 +571,11 @@ class ResponseValidator:
             system_capabilities,
             issues,
             operational_context=operational_context,
+        )
+
+        self._check_cancellation_procedure_claims(
+            response_text,
+            issues,
         )
 
         return ValidationResult(
@@ -818,3 +857,36 @@ class ResponseValidator:
         )
 
         return text.strip()
+
+    def _check_cancellation_procedure_claims(
+        self,
+        response_text: str,
+        issues: list[ValidationIssue],
+    ) -> None:
+
+        seen_matches = set()
+
+        for pattern in self.CANCELLATION_PROCEDURE_PATTERNS:
+            for match in pattern.finditer(response_text):
+                matched_text = match.group(0)
+
+                normalized = matched_text.lower().strip()
+
+                if normalized in seen_matches:
+                    continue
+
+                seen_matches.add(normalized)
+
+                issues.append(
+                    ValidationIssue(
+                        code=("unsupported_cancellation_procedure_claim"),
+                        message=(
+                            "Response recommends or "
+                            "describes a cancellation "
+                            "procedure that is not "
+                            "supported by authoritative "
+                            "evidence."
+                        ),
+                        matched_text=matched_text,
+                    )
+                )

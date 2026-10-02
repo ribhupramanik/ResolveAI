@@ -338,6 +338,18 @@ class ResolveAIPipeline:
         if "unresolved_placeholder" in issue_codes:
             retry_rules.append("- Remove all unresolved template placeholders.")
 
+        if "unsupported_cancellation_procedure_claim" in issue_codes:
+            retry_rules.append(
+                "- Do not describe or recommend any "
+                "cancellation procedure, account portal, "
+                "order-management feature, cancellation "
+                "button, confirmation email, website, or "
+                "other cancellation channel unless it is "
+                "explicitly supported by authoritative "
+                "evidence. Report only the eligibility "
+                "result and whether an action was performed."
+            )
+
         retry_rule_text = "\n".join(retry_rules)
 
         retry_user_prompt = f"""
