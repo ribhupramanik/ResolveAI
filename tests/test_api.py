@@ -21,8 +21,15 @@ class FakePipeline:
     def __init__(
         self,
         should_fail: bool = False,
+        tool_used: bool = False,
+        tool_name: str | None = None,
+        tool_success: bool | None = None,
     ):
         self.should_fail = should_fail
+
+        self.tool_used = tool_used
+        self.tool_name = tool_name
+        self.tool_success = tool_success
 
     def run(
         self,
@@ -42,13 +49,18 @@ class FakePipeline:
             verified_knowledge_topics=[
                 "order_tracking",
             ],
-            system_capability_count=4,
+            system_capability_count=5,
             system_capabilities=[
                 "live_operational_data_access",
+                "order_lookup",
                 "external_action_execution",
                 "human_support_routing",
                 "verified_support_directory",
             ],
+
+            tool_used=self.tool_used,
+            tool_name=self.tool_name,
+            tool_success=self.tool_success,
             attempts=2,
             used_fallback=False,
             validation_issues=[
@@ -139,6 +151,9 @@ def test_chat_endpoint_returns_pipeline_response(
     assert data["metadata"]["provider"] == "test-provider"
 
     assert data["metadata"]["model"] == "test-model"
+    assert data["metadata"]["tool_used"] is False
+    assert data["metadata"]["tool_name"] is None
+    assert data["metadata"]["tool_success"] is None
 
 
 def test_chat_returns_retry_trigger_issues(
@@ -196,3 +211,58 @@ def test_pipeline_failure_returns_500(
 
     assert response.json() == {"detail": ("ResolveAI could not process the request.")}
 
+def test_chat_returns_tool_metadata(
+    app,
+):
+    app.dependency_overrides[get_pipeline] = (
+        lambda: FakePipeline(
+            tool_used=True,
+            tool_name="get_order",
+            tool_success=True,
+        )
+    )
+
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/chat",
+        json={
+            "message": "Where is order ORD-10001?",
+        },
+    )
+
+    assert response.status_code == 200
+
+    metadata = response.json()["metadata"]
+
+    assert metadata["tool_used"] is True
+    assert metadata["tool_name"] == "get_order"
+    assert metadata["tool_success"] is True
+
+def test_chat_returns_failed_tool_metadata(
+    app,
+):
+    app.dependency_overrides[get_pipeline] = (
+        lambda: FakePipeline(
+            tool_used=True,
+            tool_name="get_order",
+            tool_success=False,
+        )
+    )
+
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/chat",
+        json={
+            "message": "Where is order ORD-99999?",
+        },
+    )
+
+    assert response.status_code == 200
+
+    metadata = response.json()["metadata"]
+
+    assert metadata["tool_used"] is True
+    assert metadata["tool_name"] == "get_order"
+    assert metadata["tool_success"] is False

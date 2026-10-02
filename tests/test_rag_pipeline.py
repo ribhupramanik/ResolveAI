@@ -23,6 +23,10 @@ from src.rag.system_capabilities import (
     SystemCapabilitiesContext,
 )
 
+from src.tools.base import (
+    ToolResult,
+)
+
 
 class FakeContextBuilder:
     def build(
@@ -144,6 +148,7 @@ class FakeToolRouter:
 
 def create_pipeline(
     responses,
+    tool_result=None,
 ):
 
     return ResolveAIPipeline(
@@ -153,7 +158,7 @@ def create_pipeline(
         system_capabilities_provider=FakeSystemCapabilitiesProvider(),
         prompt_builder=FakePromptBuilder(),
         validator=ResponseValidator(),
-        tool_router=FakeToolRouter(),
+        tool_router=FakeToolRouter(result=tool_result,),
     )
 
 
@@ -176,6 +181,10 @@ def test_valid_first_response():
 
     assert result.system_capabilities == ["human_support_routing"]
 
+    assert result.tool_used is False
+    assert result.tool_name is None
+    assert result.tool_success is None
+
     assert "order number" in result.text
 
 
@@ -194,6 +203,10 @@ def test_invalid_first_response_is_retried():
     assert not result.used_fallback
 
     assert len(result.validation_issues) > 0
+
+    assert result.tool_used is False
+    assert result.tool_name is None
+    assert result.tool_success is None
 
     assert any(
         issue.code == "unsupported_action_claim" for issue in result.validation_issues
@@ -218,6 +231,10 @@ def test_two_invalid_responses_use_fallback():
 
     assert len(result.validation_issues) >= 2
 
+    assert result.tool_used is False
+    assert result.tool_name is None
+    assert result.tool_success is None
+
 
 def test_empty_query_raises_error():
 
@@ -233,3 +250,55 @@ def test_non_string_query_raises_error():
 
     with pytest.raises(TypeError):
         pipeline.run(123)
+
+
+def test_successful_tool_metadata_is_returned():
+    tool_result = ToolResult(
+        tool_name="get_order",
+        success=True,
+        data={
+            "order_number": "ORD-10001",
+            "status": "shipped",
+        },
+    )
+
+    pipeline = create_pipeline(
+        responses=[
+            "Order ORD-10001 is currently shipped."
+        ],
+        tool_result=tool_result,
+    )
+
+    result = pipeline.run(
+        "Where is order ORD-10001?"
+    )
+
+    assert result.tool_used is True
+    assert result.tool_name == "get_order"
+    assert result.tool_success is True
+
+def test_failed_tool_metadata_is_returned():
+    tool_result = ToolResult(
+        tool_name="get_order",
+        success=False,
+        data={
+            "order_number": "ORD-99999",
+            "found": False,
+        },
+        error="Order not found.",
+    )
+
+    pipeline = create_pipeline(
+        responses=[
+            "Order ORD-99999 could not be found."
+        ],
+        tool_result=tool_result,
+    )
+
+    result = pipeline.run(
+        "Where is order ORD-99999?"
+    )
+
+    assert result.tool_used is True
+    assert result.tool_name == "get_order"
+    assert result.tool_success is False

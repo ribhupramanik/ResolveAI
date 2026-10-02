@@ -33,6 +33,10 @@ class RAGResult:
     system_capability_count: int
     system_capabilities: list[str]
 
+    tool_used: bool
+    tool_name: str | None
+    tool_success: bool | None
+
     attempts: int
     used_fallback: bool
 
@@ -143,6 +147,9 @@ class ResolveAIPipeline:
                 verified_knowledge_topics=(verified_knowledge.topics),
                 system_capability_count=(system_capabilities.capability_count),
                 system_capabilities=(system_capabilities.capabilities),
+                tool_used=operational_context.tool_used,
+                tool_name=operational_context.tool_name,
+                tool_success=operational_context.tool_success,
                 attempts=1,
                 used_fallback=False,
                 validation_issues=[],
@@ -172,6 +179,9 @@ class ResolveAIPipeline:
                 verified_knowledge_topics=(verified_knowledge.topics),
                 system_capability_count=(system_capabilities.capability_count),
                 system_capabilities=(system_capabilities.capabilities),
+                tool_used=operational_context.tool_used,
+                tool_name=operational_context.tool_name,
+                tool_success=operational_context.tool_success,
                 attempts=2,
                 used_fallback=False,
                 validation_issues=(first_validation.issues),
@@ -190,6 +200,9 @@ class ResolveAIPipeline:
             verified_knowledge_topics=(verified_knowledge.topics),
             system_capability_count=(system_capabilities.capability_count),
             system_capabilities=(system_capabilities.capabilities),
+            tool_used=operational_context.tool_used,
+            tool_name=operational_context.tool_name,
+            tool_success=operational_context.tool_success,
             attempts=2,
             used_fallback=True,
             validation_issues=all_issues,

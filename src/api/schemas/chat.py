@@ -24,6 +24,10 @@ class ChatMetadata(BaseModel):
     system_capability_count: int
     system_capabilities: list[str]
 
+    tool_used: bool
+    tool_name: str | None = None
+    tool_success: bool | None = None
+
     attempts: int
     used_fallback: bool
 
