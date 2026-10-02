@@ -279,6 +279,15 @@ def send_message(
             "system_capabilities":
                 result.system_capabilities,
 
+            "tool_used":
+                result.tool_used,
+
+            "tool_name":
+                result.tool_name,
+
+            "tool_success":
+                result.tool_success,
+
             "attempts":
                 result.attempts,
 
