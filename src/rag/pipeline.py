@@ -318,7 +318,12 @@ class ResolveAIPipeline:
                 "- Do not recommend contacting, calling, "
                 "emailing, checking with, or reaching out "
                 "to a merchant, bank, payment provider, "
-                "courier, carrier, or other third party."
+                "courier, carrier, or other third party. "
+                "Do not invent or recommend a third-party "
+                "website, app, portal, tracking page, or "
+                "other external service unless it is "
+                "explicitly supported by authoritative "
+                "evidence."
             )
 
         if "unsupported_numeric_claim" in issue_codes:

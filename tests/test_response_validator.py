@@ -549,3 +549,73 @@ def test_numeric_claim_from_failed_operational_data_is_rejected(
     assert not result.is_valid
 
     assert any(issue.code == "unsupported_numeric_claim" for issue in result.issues)
+
+
+def test_unverified_tracking_website_is_rejected(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    operational_context = OperationalContext(
+        context=(
+            "Tool: get_order\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- order_number: ORD-10001\n"
+            "- carrier: DemoShip\n"
+            "- tracking_number: DSH10001001"
+        ),
+        tool_used=True,
+        tool_name="get_order",
+        tool_success=True,
+    )
+
+    result = validator.validate(
+        response_text=(
+            "You can use the tracking number with "
+            "DemoShip's website or app to see the "
+            "current location of your shipment."
+        ),
+        query="Where is order ORD-10001?",
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+        operational_context=operational_context,
+    )
+
+    assert not result.is_valid
+
+    assert any(
+        issue.code == "unsupported_third_party_claim"
+        for issue in result.issues
+    )
+
+def test_grounded_tracking_details_are_allowed(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    operational_context = OperationalContext(
+        context=(
+            "Tool: get_order\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- carrier: DemoShip\n"
+            "- tracking_number: DSH10001001"
+        ),
+        tool_used=True,
+        tool_name="get_order",
+        tool_success=True,
+    )
+
+    result = validator.validate(
+        response_text=(
+            "The carrier is DemoShip and the tracking "
+            "number is DSH10001001."
+        ),
+        query="Where is order ORD-10001?",
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+        operational_context=operational_context,
+    )
+
+    assert result.is_valid

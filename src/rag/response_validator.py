@@ -417,6 +417,17 @@ class ResponseValidator:
             r")\b",
             re.IGNORECASE,
         ),
+        re.compile(
+            r"\b(?:use|enter|paste|check|track)\s+"
+            r"(?:the\s+|your\s+)?"
+            r"tracking\s+(?:number|code)\s+"
+            r"(?:on|in|with|through|via)\s+"
+            r"(?:"
+            r"[A-Za-z0-9][A-Za-z0-9 .&-]*['’]s\s+"
+            r")?"
+            r"(?:website|app|portal|tracking\s+page)\b",
+            re.IGNORECASE,
+        ),
     ]
 
     CURRENCY_SYMBOL_TO_CODE = {
