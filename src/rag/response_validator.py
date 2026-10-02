@@ -4,8 +4,16 @@ from dataclasses import dataclass
 from src.rag.knowledge_retriever import (
     VerifiedKnowledgeContext,
 )
+from src.rag.operational_context import (
+    OperationalContext,
+)
 from src.rag.system_capabilities import (
     SystemCapabilitiesContext,
+)
+
+from decimal import (
+    Decimal,
+    InvalidOperation,
 )
 
 
@@ -249,7 +257,6 @@ class ResponseValidator:
     ]
 
     SUPPORT_ROUTE_PATTERNS = [  # noqa: RUF012
-
         # Recommend contacting an unverified support
         # person, team, company, or channel.
         re.compile(
@@ -275,7 +282,6 @@ class ResponseValidator:
             r")\b",
             re.IGNORECASE,
         ),
-
         # Recommend checking/visiting/using an
         # unverified website, portal, resource, channel,
         # help center, or communication.
@@ -307,7 +313,6 @@ class ResponseValidator:
             r")\b",
             re.IGNORECASE,
         ),
-
         # Recommend using a supposed phone number.
         re.compile(
             r"\b(?:"
@@ -326,7 +331,6 @@ class ResponseValidator:
             r"phone\s+number\b",
             re.IGNORECASE,
         ),
-
         # Contact a company through/via an alleged
         # website, channel, portal, or help resource.
         re.compile(
@@ -415,6 +419,13 @@ class ResponseValidator:
         ),
     ]
 
+    CURRENCY_SYMBOL_TO_CODE = {
+        "₹": "inr",
+        "$": "usd",
+        "€": "eur",
+        "£": "gbp",
+    }
+
     NUMERIC_CLAIM_PATTERN = re.compile(
         r"""
         (?:
@@ -464,6 +475,7 @@ class ResponseValidator:
         query: str,
         verified_knowledge: VerifiedKnowledgeContext,
         system_capabilities: SystemCapabilitiesContext,
+        operational_context: OperationalContext | None = None,
     ) -> ValidationResult:
 
         if not isinstance(
@@ -503,6 +515,7 @@ class ResponseValidator:
             verified_knowledge,
             system_capabilities,
             issues,
+            operational_context=operational_context,
         )
 
         return ValidationResult(
@@ -625,32 +638,123 @@ class ResponseValidator:
         verified_knowledge: VerifiedKnowledgeContext,
         system_capabilities: SystemCapabilitiesContext,
         issues: list[ValidationIssue],
+        operational_context: OperationalContext | None = None,
     ) -> None:
 
-        evidence = f"{query} {verified_knowledge.context} {system_capabilities.context}"
+        evidence_parts = [
+            query,
+            verified_knowledge.context,
+            system_capabilities.context,
+        ]
+
+        if operational_context is not None and operational_context.tool_success:
+            evidence_parts.append(operational_context.context)
+
+        evidence = " ".join(evidence_parts)
 
         normalized_evidence = self._normalize_text(evidence)
 
         for match in self.NUMERIC_CLAIM_PATTERN.finditer(response_text):
             claim = match.group(0)
 
-            normalized_claim = self._normalize_text(claim)
+            normalized_claim = self._normalize_text(
+                claim
+            )
 
             if normalized_claim in normalized_evidence:
                 continue
 
+            if self._currency_claim_is_supported(
+                claim,
+                normalized_evidence,
+            ):
+                continue
+
             issues.append(
                 ValidationIssue(
-                    code=("unsupported_numeric_claim"),
+                    code="unsupported_numeric_claim",
                     message=(
                         "Response contains a "
                         "numerical claim that is "
-                        "not present in the customer request "
-                        "or authoritative evidence."
+                        "not present in the customer "
+                        "request or authoritative evidence."
                     ),
                     matched_text=claim,
                 )
             )
+
+
+    @classmethod
+    def _currency_claim_is_supported(
+        cls,
+        claim: str,
+        normalized_evidence: str,
+    ) -> bool:
+
+        currency_symbol = next(
+            (
+                symbol
+                for symbol in cls.CURRENCY_SYMBOL_TO_CODE
+                if symbol in claim
+            ),
+            None,
+        )
+
+        if currency_symbol is None:
+            return False
+
+        currency_code = (
+            cls.CURRENCY_SYMBOL_TO_CODE[
+                currency_symbol
+            ]
+        )
+
+        amount_match = re.search(
+            r"\d+(?:\.\d+)?",
+            claim,
+        )
+
+        if amount_match is None:
+            return False
+
+        try:
+            claim_amount = Decimal(
+                amount_match.group(0)
+            )
+        except InvalidOperation:
+            return False
+
+        evidence_amount_matches = re.findall(
+            r"\d+(?:\.\d+)?",
+            normalized_evidence,
+        )
+
+        evidence_amounts = []
+
+        for value in evidence_amount_matches:
+            try:
+                evidence_amounts.append(
+                    Decimal(value)
+                )
+            except InvalidOperation:
+                continue
+
+        amount_is_supported = (
+            claim_amount in evidence_amounts
+        )
+
+        currency_is_supported = bool(
+            re.search(
+                rf"\b{re.escape(currency_code)}\b",
+                normalized_evidence,
+            )
+        )
+
+        return (
+            amount_is_supported
+            and currency_is_supported
+        )
+
 
     @staticmethod
     def _normalize_text(

@@ -4,9 +4,13 @@ from src.rag.context_builder import ContextBuilder
 from src.rag.conversation import ConversationTurn
 from src.rag.generator import Generator
 from src.rag.knowledge_retriever import KnowledgeRetriever
+from src.rag.operational_context import (
+    build_operational_context,
+)
 from src.rag.prompt_builder import PromptBuilder, PromptPayload
 from src.rag.response_validator import ResponseValidator, ValidationIssue
 from src.rag.system_capabilities import SystemCapabilitiesProvider
+from src.tools.router import ToolRouter
 
 SAFE_FALLBACK = (
     "I'm sorry, but I don't have enough verified information "
@@ -44,7 +48,10 @@ class ResolveAIPipeline:
         system_capabilities_provider: SystemCapabilitiesProvider | None = None,
         prompt_builder: PromptBuilder | None = None,
         validator: ResponseValidator | None = None,
+        tool_router: ToolRouter | None = None,
     ):
+
+        self.tool_router = tool_router if tool_router is not None else ToolRouter()
         self.generator = generator
 
         self.context_builder = (
@@ -83,6 +90,13 @@ class ResolveAIPipeline:
 
         history = conversation_history or []
 
+        tool_result = self.tool_router.run(
+            query,
+            history,
+        )
+
+        operational_context = build_operational_context(tool_result)
+
         contextual_query = self._build_contextual_query(
             query,
             history,
@@ -104,6 +118,7 @@ class ResolveAIPipeline:
             verified_knowledge,
             system_capabilities,
             history,
+            operational_context=operational_context,
         )
 
         # First Generation Attempt
@@ -115,6 +130,7 @@ class ResolveAIPipeline:
             contextual_query,
             verified_knowledge,
             system_capabilities,
+            operational_context=operational_context,
         )
 
         if first_validation.is_valid:
@@ -143,6 +159,7 @@ class ResolveAIPipeline:
             contextual_query,
             verified_knowledge,
             system_capabilities,
+            operational_context=operational_context,
         )
 
         if second_validation.is_valid:
@@ -202,14 +219,10 @@ class ResolveAIPipeline:
     @staticmethod
     def _build_knowledge_query(
         query: str,
-        conversation_history: list[
-            ConversationTurn
-        ],
+        conversation_history: list[ConversationTurn],
     ) -> str:
 
-        normalized_query = (
-            query.lower().strip()
-        )
+        normalized_query = query.lower().strip()
 
         ambiguous_phrases = (
             "do that",
@@ -224,10 +237,7 @@ class ResolveAIPipeline:
             "can i do it",
         )
 
-        is_ambiguous = any(
-            phrase in normalized_query
-            for phrase in ambiguous_phrases
-        )
+        is_ambiguous = any(phrase in normalized_query for phrase in ambiguous_phrases)
 
         if not is_ambiguous:
             return query.strip()
@@ -235,18 +245,13 @@ class ResolveAIPipeline:
         previous_customer_messages = [
             turn.content.strip()
             for turn in conversation_history
-            if (
-                turn.role == "user"
-                and turn.content.strip()
-            )
+            if (turn.role == "user" and turn.content.strip())
         ]
 
         if not previous_customer_messages:
             return query.strip()
 
-        previous_message = (
-            previous_customer_messages[-1]
-        )
+        previous_message = previous_customer_messages[-1]
 
         return "\n".join(  # noqa: FLY002
             [
