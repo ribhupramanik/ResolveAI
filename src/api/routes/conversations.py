@@ -40,6 +40,9 @@ from src.rag.conversation import (
 from src.rag.pipeline import (
     ResolveAIPipeline,
 )
+from src.services.pending_action_confirmation import (
+    resolve_pending_action_response,
+)
 from src.services.pending_action_integration import (
     maybe_create_pending_cancellation,
 )
@@ -230,15 +233,96 @@ def send_message(
     db.add(user_message)
 
     try:
+        pending_decision = resolve_pending_action_response(
+            db=db,
+            conversation_id=conversation.id,
+            customer_text=customer_text,
+        )
+
+        if pending_decision.handled:
+            action = pending_decision.action
+
+            if action is None:
+                raise RuntimeError("Handled pending action has no action.")
+
+            if pending_decision.decision == "confirmed":
+                assistant_text = (
+                    f"Cancellation of "
+                    f"{action.target_identifier} "
+                    f"has been confirmed. "
+                    f"No cancellation has been performed yet."
+                )
+
+            elif pending_decision.decision == "rejected":
+                assistant_text = (
+                    f"The pending cancellation request for "
+                    f"{action.target_identifier} "
+                    f"has been rejected. "
+                    f"No cancellation has been performed."
+                )
+
+            else:
+                raise RuntimeError("Unknown pending action decision.")
+
+            metadata_data = {
+                "retrieved_count": 0,
+                "verified_knowledge_count": 0,
+                "verified_knowledge_topics": [],
+                "system_capability_count": 0,
+                "system_capabilities": [],
+                "tool_used": False,
+                "tool_name": None,
+                "tool_success": None,
+                "attempts": 0,
+                "used_fallback": False,
+                "retry_trigger_issues": [],
+                "provider": None,
+                "model": None,
+            }
+
+            assistant_message = Message(
+                conversation_id=conversation.id,
+                role="assistant",
+                content=assistant_text,
+                ai_metadata=metadata_data,
+            )
+
+            db.add(assistant_message)
+
+            conversation.updated_at = datetime.now(timezone.utc)
+
+            db.commit()
+
+            db.refresh(user_message)
+            db.refresh(assistant_message)
+
+            metadata = ChatMetadata(
+                retrieved_count=0,
+                verified_knowledge_count=0,
+                verified_knowledge_topics=[],
+                system_capability_count=0,
+                system_capabilities=[],
+                tool_used=False,
+                tool_name=None,
+                tool_success=None,
+                attempts=0,
+                used_fallback=False,
+                retry_trigger_issues=[],
+                provider=None,
+                model=None,
+            )
+
+            return ConversationMessageResponse(
+                user_message=user_message,
+                assistant_message=assistant_message,
+                metadata=metadata,
+            )
+
         result = pipeline.run(
             customer_text,
             conversation_history=(conversation_history),
         )
 
-        # If the cancellation-eligibility tool confirms
-        # that an order is eligible and requires explicit
-        # confirmation, persist a pending cancellation
-        # action for this conversation.
         maybe_create_pending_cancellation(
             db=db,
             conversation_id=conversation.id,
