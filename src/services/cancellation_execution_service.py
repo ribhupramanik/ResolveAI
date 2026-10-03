@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.db.models import Order, PendingAction
+from src.db.models import ActionExecutionAudit, Order, PendingAction
 from src.services.pending_action_service import (
     CONFIRMED,
     EXECUTED,
@@ -36,6 +36,36 @@ class CancellationExecutionService:
         db: Session,
     ):
         self.db = db
+
+    def _create_audit(
+        self,
+        *,
+        action: PendingAction,
+        outcome: str,
+        action_performed: bool,
+        previous_target_status: str | None,
+        final_target_status: str | None,
+        reason: str,
+        details: dict | None = None,
+    ) -> ActionExecutionAudit:
+
+        audit = ActionExecutionAudit(
+            pending_action_id=action.id,
+            conversation_id=action.conversation_id,
+            action_type=action.action_type,
+            target_type=action.target_type,
+            target_identifier=(action.target_identifier),
+            outcome=outcome,
+            action_performed=action_performed,
+            previous_target_status=(previous_target_status),
+            final_target_status=(final_target_status),
+            reason=reason,
+            details=details,
+        )
+
+        self.db.add(audit)
+
+        return audit
 
     def execute(
         self,
@@ -94,6 +124,22 @@ class CancellationExecutionService:
                     "Executed cancellation action has inconsistent order state."
                 )
 
+            audit = self.db.scalar(
+                select(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id == action.id
+                )
+            )
+
+            if audit is None:
+                raise RuntimeError(
+                    "Executed cancellation action has no execution audit."
+                )
+
+            if audit.outcome != EXECUTED:
+                raise RuntimeError(
+                    "Executed cancellation action has an inconsistent audit outcome."
+                )
+
             return CancellationExecutionResult(
                 success=True,
                 executed=False,
@@ -137,11 +183,25 @@ class CancellationExecutionService:
             reason = "The target order no longer exists."
 
             action.status = INVALIDATED
+
             action.action_data = {
                 **action_data,
                 "action_performed": False,
                 "execution_blocked_reason": reason,
             }
+
+            self._create_audit(
+                action=action,
+                outcome=INVALIDATED,
+                action_performed=False,
+                previous_target_status=None,
+                final_target_status=None,
+                reason=reason,
+                details={
+                    "blocked_stage": ("execution_revalidation"),
+                    "order_found": False,
+                },
+            )
 
             self.db.flush()
 
@@ -158,7 +218,6 @@ class CancellationExecutionService:
 
         current_status = order.status.strip().lower()
 
-        # Re-check eligibility at execution time.
         if current_status != ELIGIBLE_ORDER_STATUS:
             reason = (
                 "Order is no longer eligible for "
@@ -167,12 +226,26 @@ class CancellationExecutionService:
             )
 
             action.status = INVALIDATED
+
             action.action_data = {
                 **action_data,
                 "action_performed": False,
                 "current_order_status": order.status,
                 "execution_blocked_reason": reason,
             }
+
+            self._create_audit(
+                action=action,
+                outcome=INVALIDATED,
+                action_performed=False,
+                previous_target_status=order.status,
+                final_target_status=order.status,
+                reason=reason,
+                details={
+                    "blocked_stage": ("execution_revalidation"),
+                    "order_found": True,
+                },
+            )
 
             self.db.flush()
 
@@ -204,6 +277,20 @@ class CancellationExecutionService:
             "executed_at": executed_at.isoformat(),
         }
 
+        success_reason = "Order cancellation executed successfully."
+
+        self._create_audit(
+            action=action,
+            outcome=EXECUTED,
+            action_performed=True,
+            previous_target_status=previous_status,
+            final_target_status=(CANCELLED_ORDER_STATUS),
+            reason=success_reason,
+            details={
+                "executed_at": (executed_at.isoformat()),
+            },
+        )
+
         self.db.flush()
 
         return CancellationExecutionResult(
@@ -214,5 +301,5 @@ class CancellationExecutionService:
             action_status=action.status,
             order_number=order.order_number,
             order_status=order.status,
-            reason=("Order cancellation executed successfully."),
+            reason=success_reason,
         )

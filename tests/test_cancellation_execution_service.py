@@ -1,9 +1,11 @@
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import select
 
 from src.db.database import SessionLocal
 from src.db.models import (
+    ActionExecutionAudit,
     Conversation,
     Customer,
     Order,
@@ -127,6 +129,22 @@ def test_confirmed_processing_order_is_cancelled(
     assert action.action_data["final_order_status"] == "cancelled"
 
     assert action.action_data["executed_at"] is not None
+    audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action.id
+        )
+    )
+
+    assert audit is not None
+
+    assert audit.outcome == "executed"
+    assert audit.action_performed is True
+
+    assert audit.previous_target_status == "processing"
+
+    assert audit.final_target_status == "cancelled"
+
+    assert audit.target_identifier == order.order_number
 
 
 def test_order_that_ships_after_confirmation_is_not_cancelled(
@@ -163,6 +181,21 @@ def test_order_that_ships_after_confirmation_is_not_cancelled(
     assert action.action_data["action_performed"] is False
 
     assert action.action_data["current_order_status"] == "shipped"
+
+    audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action.id
+        )
+    )
+
+    assert audit is not None
+
+    assert audit.outcome == "invalidated"
+    assert audit.action_performed is False
+
+    assert audit.previous_target_status == "shipped"
+
+    assert audit.final_target_status == "shipped"
 
 
 def test_pending_action_cannot_execute(
@@ -203,6 +236,14 @@ def test_pending_action_cannot_execute(
     assert order.status == "processing"
     assert action.status == "pending"
 
+    audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action.id
+        )
+    )
+
+    assert audit is None
+
 
 def test_cancellation_execution_is_idempotent(
     db,
@@ -236,6 +277,17 @@ def test_cancellation_execution_is_idempotent(
 
     assert order.status == "cancelled"
     assert action.status == "executed"
+
+    audits = db.scalars(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action.id
+        )
+    ).all()
+
+    assert len(audits) == 1
+
+    assert audits[0].outcome == "executed"
+    assert audits[0].action_performed is True
 
 
 def test_missing_pending_action_does_not_execute(
