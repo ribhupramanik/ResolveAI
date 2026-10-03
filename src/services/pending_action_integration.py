@@ -8,7 +8,6 @@ from src.services.pending_action_service import (
     PendingActionService,
 )
 
-
 ORDER_NUMBER_PATTERN = re.compile(
     r"^ORD-\d+$",
     re.IGNORECASE,
@@ -34,10 +33,7 @@ def maybe_create_pending_cancellation(
     if not result.tool_used:
         return None
 
-    if (
-        result.tool_name
-        != "check_cancellation_eligibility"
-    ):
+    if result.tool_name != "check_cancellation_eligibility":
         return None
 
     if result.tool_success is not True:
@@ -54,10 +50,7 @@ def maybe_create_pending_cancellation(
     if data.get("eligible") is not True:
         return None
 
-    if (
-        data.get("requires_confirmation")
-        is not True
-    ):
+    if data.get("requires_confirmation") is not True:
         return None
 
     if data.get("action_performed") is not False:
@@ -70,9 +63,7 @@ def maybe_create_pending_cancellation(
 
     order_number = order_number.strip().upper()
 
-    if not ORDER_NUMBER_PATTERN.fullmatch(
-        order_number
-    ):
+    if not ORDER_NUMBER_PATTERN.fullmatch(order_number):
         return None
 
     action_data = {
@@ -85,9 +76,7 @@ def maybe_create_pending_cancellation(
     reason = data.get("reason")
 
     if isinstance(reason, str) and reason.strip():
-        action_data["eligibility_reason"] = (
-            reason.strip()
-        )
+        action_data["eligibility_reason"] = reason.strip()
 
     service = PendingActionService(db)
 

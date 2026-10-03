@@ -244,9 +244,4 @@ def test_non_cancellation_tool_does_not_create_action(
 
     service = PendingActionService(db)
 
-    assert (
-        service.get_pending_action(
-            conversation.id
-        )
-        is None
-    )
+    assert service.get_pending_action(conversation.id) is None
