@@ -7,7 +7,14 @@ function ChatPanel({
   loading,
   error,
   onSubmit,
+  pendingAction,
+  actionLoading,
+  onPendingActionDecision,
 }) {
+  const hasCancellationPending =
+    pendingAction?.action_type === "cancel_order" &&
+    pendingAction?.status === "pending";
+
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-slate-950">
       <header className="border-b border-slate-800 px-6 py-4">
@@ -37,6 +44,53 @@ function ChatPanel({
           />
         ))}
 
+        {hasCancellationPending && (
+          <div className="ml-11 max-w-xl">
+            <div className="rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-lg">
+              <div className="flex items-start gap-3">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-slate-100">
+                    Confirm cancellation
+                  </p>
+
+                  <p className="mt-2 text-sm leading-6 text-slate-400">
+                    Do you want to cancel{" "}
+                    <span className="font-semibold text-slate-200">
+                      {pendingAction.target_identifier}
+                    </span>
+                    ?
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    No cancellation will be performed at this confirmation
+                    stage.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  disabled={actionLoading || loading}
+                  onClick={() => onPendingActionDecision("confirm")}
+                  className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {actionLoading ? "Processing..." : "Confirm cancellation"}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={actionLoading || loading}
+                  onClick={() => onPendingActionDecision("reject")}
+                  className="rounded-lg border border-slate-600 bg-slate-950 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Keep order
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {loading && <MessageBubble role="assistant" content="Thinking..." />}
 
         {error && (
@@ -51,14 +105,17 @@ function ChatPanel({
           <textarea
             value={message}
             onChange={(event) => setMessage(event.target.value)}
-            placeholder="Ask ResolveAI..."
+            placeholder={
+              actionLoading ? "Processing confirmation..." : "Ask ResolveAI..."
+            }
             rows={2}
-            className="max-h-40 min-h-12 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-slate-600"
+            disabled={actionLoading}
+            className="max-h-40 min-h-12 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
           />
 
           <button
             type="submit"
-            disabled={loading || !message.trim()}
+            disabled={loading || actionLoading || !message.trim()}
             className="rounded-lg bg-white px-5 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Send

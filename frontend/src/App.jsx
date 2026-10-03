@@ -4,6 +4,7 @@ import {
   createConversation,
   getConversationMessages,
   getConversations,
+  getPendingAction,
   sendConversationMessage,
 } from "./api/conversations";
 
@@ -22,7 +23,11 @@ function App() {
 
   const [metadata, setMetadata] = useState(null);
 
+  const [pendingAction, setPendingAction] = useState(null);
+
   const [loading, setLoading] = useState(false);
+
+  const [actionLoading, setActionLoading] = useState(false);
 
   const [error, setError] = useState("");
 
@@ -33,10 +38,12 @@ function App() {
   useEffect(() => {
     if (!activeConversationId) {
       setMessages([]);
+      setMetadata(null);
+      setPendingAction(null);
       return;
     }
 
-    loadMessages(activeConversationId);
+    loadConversationData(activeConversationId);
   }, [activeConversationId]);
 
   async function loadConversations() {
@@ -55,24 +62,32 @@ function App() {
     }
   }
 
-  async function loadMessages(conversationId) {
+  async function loadConversationData(conversationId) {
     try {
       setError("");
 
       setMessages([]);
       setMetadata(null);
+      setPendingAction(null);
 
-      const data = await getConversationMessages(conversationId);
+      const [messagesData, pendingActionData] = await Promise.all([
+        getConversationMessages(conversationId),
+        getPendingAction(conversationId),
+      ]);
 
-      setMessages(data);
+      setMessages(messagesData);
 
-      const latestAssistantWithMetadata = [...data]
+      setPendingAction(pendingActionData);
+
+      const latestAssistantWithMetadata = [...messagesData]
         .reverse()
         .find((item) => item.role === "assistant" && item.ai_metadata);
 
       setMetadata(latestAssistantWithMetadata?.ai_metadata ?? null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load messages.");
+      setError(
+        err instanceof Error ? err.message : "Failed to load conversation.",
+      );
     }
   }
 
@@ -88,6 +103,7 @@ function App() {
 
       setMessages([]);
       setMetadata(null);
+      setPendingAction(null);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to create conversation.",
@@ -100,7 +116,7 @@ function App() {
 
     const trimmedMessage = message.trim();
 
-    if (!trimmedMessage || loading) {
+    if (!trimmedMessage || loading || actionLoading) {
       return;
     }
 
@@ -145,11 +161,49 @@ function App() {
 
       setMetadata(data.metadata);
 
+      setPendingAction(data.pending_action);
+
       await loadConversations();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handlePendingActionDecision(decision) {
+    if (!activeConversationId || !pendingAction || actionLoading || loading) {
+      return;
+    }
+
+    const messageText = decision === "confirm" ? "yes" : "no";
+
+    try {
+      setActionLoading(true);
+      setError("");
+
+      const data = await sendConversationMessage(
+        activeConversationId,
+        messageText,
+      );
+
+      setMessages((current) => [
+        ...current,
+        data.user_message,
+        data.assistant_message,
+      ]);
+
+      setMetadata(data.metadata);
+
+      setPendingAction(data.pending_action);
+
+      await loadConversations();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to process confirmation.",
+      );
+    } finally {
+      setActionLoading(false);
     }
   }
 
@@ -170,6 +224,9 @@ function App() {
           loading={loading}
           error={error}
           onSubmit={handleSubmit}
+          pendingAction={pendingAction}
+          actionLoading={actionLoading}
+          onPendingActionDecision={handlePendingActionDecision}
         />
 
         <IntelligencePanel metadata={metadata} />

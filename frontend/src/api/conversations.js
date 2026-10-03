@@ -38,6 +38,18 @@ export async function getConversationMessages(conversationId) {
   return response.json();
 }
 
+export async function getPendingAction(conversationId) {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/conversations/${conversationId}/pending-action`,
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to load pending action.");
+  }
+
+  return response.json();
+}
+
 export async function sendConversationMessage(conversationId, message) {
   const response = await fetch(
     `${API_BASE_URL}/api/v1/conversations/${conversationId}/messages`,
