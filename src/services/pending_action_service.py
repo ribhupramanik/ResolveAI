@@ -10,6 +10,8 @@ PENDING = "pending"
 CONFIRMED = "confirmed"
 REJECTED = "rejected"
 SUPERSEDED = "superseded"
+EXECUTED = "executed"
+INVALIDATED = "invalidated"
 
 
 class PendingActionService:
