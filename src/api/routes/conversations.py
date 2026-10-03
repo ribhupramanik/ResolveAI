@@ -47,6 +47,15 @@ from src.services.pending_action_integration import (
     maybe_create_pending_cancellation,
 )
 
+from src.api.schemas.pending_action import (
+    PendingActionResponse,
+)
+from src.services.pending_action_service import (
+    PendingActionService,
+)
+
+
+
 router = APIRouter(
     prefix="/conversations",
     tags=["Conversations"],
@@ -142,6 +151,43 @@ def get_conversation(
 
     return conversation
 
+@router.get(
+    "/{conversation_id}/pending-action",
+    response_model=PendingActionResponse | None,
+)
+def get_pending_action(
+    conversation_id: int,
+    db: DatabaseDependency,
+) -> PendingActionResponse | None:
+
+    conversation = db.get(
+        Conversation,
+        conversation_id,
+    )
+
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found.",
+        )
+
+    service = PendingActionService(db)
+
+    pending_action = service.get_pending_action(
+        conversation_id
+    )
+
+    if pending_action is None:
+        return None
+
+    return PendingActionResponse(
+        id=pending_action.id,
+        action_type=pending_action.action_type,
+        target_identifier=(
+            pending_action.target_identifier
+        ),
+        status=pending_action.status,
+    )
 
 @router.get(
     "/{conversation_id}/messages",

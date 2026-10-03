@@ -243,3 +243,102 @@ def test_unrelated_message_leaves_action_pending(
     assert action.confirmed_at is None
 
     assert fake_pipeline.run_calls == 1
+
+
+def test_get_pending_action_returns_safe_ui_state(
+    client,
+    db,
+    conversation,
+):
+    action = create_pending_cancellation(
+        db,
+        conversation,
+    )
+
+    response = client.get(
+        (  # noqa: UP034
+            f"/api/v1/conversations/{conversation.id}/pending-action"
+        )
+    )
+
+    assert response.status_code == 200
+
+    assert response.json() == {
+        "id": action.id,
+        "action_type": "cancel_order",
+        "target_identifier": "ORD-10002",
+        "status": "pending",
+    }
+
+
+def test_get_pending_action_returns_null_when_none_exists(
+    client,
+    conversation,
+):
+    response = client.get(
+        (  # noqa: UP034
+            f"/api/v1/conversations/{conversation.id}/pending-action"
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.json() is None
+
+
+def test_get_pending_action_disappears_after_confirmation(
+    client,
+    db,
+    conversation,
+):
+    create_pending_cancellation(
+        db,
+        conversation,
+    )
+
+    service = PendingActionService(db)
+
+    confirmed = service.confirm_pending_action(conversation.id)
+
+    assert confirmed is not None
+    assert confirmed.status == "confirmed"
+
+    response = client.get(
+        (  # noqa: UP034
+            f"/api/v1/conversations/{conversation.id}/pending-action"
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.json() is None
+
+
+def test_get_pending_action_disappears_after_rejection(
+    client,
+    db,
+    conversation,
+):
+    create_pending_cancellation(
+        db,
+        conversation,
+    )
+
+    service = PendingActionService(db)
+
+    rejected = service.reject_pending_action(
+        conversation.id
+    )
+
+    assert rejected is not None
+    assert rejected.status == "rejected"
+
+    response = client.get(
+        
+            f"/api/v1/conversations/"
+            f"{conversation.id}/pending-action"
+        
+    )
+
+    assert response.status_code == 200
+    assert response.json() is None
+
+
