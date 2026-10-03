@@ -30,6 +30,9 @@ from src.api.schemas.message import (
     MessageCreate,
     MessageResponse,
 )
+from src.api.schemas.pending_action import (
+    PendingActionResponse,
+)
 from src.db.models import (
     Conversation,
     Message,
@@ -46,15 +49,9 @@ from src.services.pending_action_confirmation import (
 from src.services.pending_action_integration import (
     maybe_create_pending_cancellation,
 )
-
-from src.api.schemas.pending_action import (
-    PendingActionResponse,
-)
 from src.services.pending_action_service import (
     PendingActionService,
 )
-
-
 
 router = APIRouter(
     prefix="/conversations",
@@ -151,6 +148,7 @@ def get_conversation(
 
     return conversation
 
+
 @router.get(
     "/{conversation_id}/pending-action",
     response_model=PendingActionResponse | None,
@@ -173,9 +171,7 @@ def get_pending_action(
 
     service = PendingActionService(db)
 
-    pending_action = service.get_pending_action(
-        conversation_id
-    )
+    pending_action = service.get_pending_action(conversation_id)
 
     if pending_action is None:
         return None
@@ -183,11 +179,10 @@ def get_pending_action(
     return PendingActionResponse(
         id=pending_action.id,
         action_type=pending_action.action_type,
-        target_identifier=(
-            pending_action.target_identifier
-        ),
+        target_identifier=(pending_action.target_identifier),
         status=pending_action.status,
     )
+
 
 @router.get(
     "/{conversation_id}/messages",
@@ -362,6 +357,7 @@ def send_message(
                 user_message=user_message,
                 assistant_message=assistant_message,
                 metadata=metadata,
+                pending_action=None,
             )
 
         result = pipeline.run(
@@ -374,6 +370,10 @@ def send_message(
             conversation_id=conversation.id,
             result=result,
         )
+
+        pending_action_service = PendingActionService(db)
+
+        pending_action = pending_action_service.get_pending_action(conversation.id)
 
         retry_trigger_issues = [
             {
@@ -447,8 +447,19 @@ def send_message(
         model=result.model,
     )
 
+    pending_action_response = None
+
+    if pending_action is not None:
+        pending_action_response = PendingActionResponse(
+            id=pending_action.id,
+            action_type=pending_action.action_type,
+            target_identifier=(pending_action.target_identifier),
+            status=pending_action.status,
+        )
+
     return ConversationMessageResponse(
         user_message=user_message,
         assistant_message=assistant_message,
         metadata=metadata,
+        pending_action=pending_action_response,
     )

@@ -9,6 +9,9 @@ from pydantic import (
 from src.api.schemas.chat import (
     ChatMetadata,
 )
+from src.api.schemas.pending_action import (
+    PendingActionResponse,
+)
 
 
 class MessageCreate(BaseModel):
@@ -33,3 +36,4 @@ class ConversationMessageResponse(BaseModel):
     user_message: MessageResponse
     assistant_message: MessageResponse
     metadata: ChatMetadata
+    pending_action: PendingActionResponse | None = None
