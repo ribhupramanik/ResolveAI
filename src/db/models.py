@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     ForeignKey,
@@ -187,6 +188,84 @@ class PendingAction(Base):
 
     conversation: Mapped["Conversation"] = relationship(
         back_populates="pending_actions",
+    )
+
+
+class ActionExecutionAudit(Base):
+    __tablename__ = "action_execution_audits"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+    )
+
+    pending_action_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "pending_actions.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+
+    conversation_id: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        index=True,
+    )
+
+    action_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True,
+    )
+
+    target_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+    target_identifier: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        index=True,
+    )
+
+    outcome: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        index=True,
+    )
+
+    action_performed: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+    )
+
+    previous_target_status: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+    )
+
+    final_target_status: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+    )
+
+    reason: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    details: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
     )
 
 
