@@ -75,6 +75,11 @@ class Conversation(Base):
         cascade="all, delete-orphan",
         order_by="Message.created_at",
     )
+    pending_actions: Mapped[list["PendingAction"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="PendingAction.created_at",
+    )
 
 
 class Message(Base):
@@ -116,6 +121,72 @@ class Message(Base):
 
     conversation: Mapped["Conversation"] = relationship(
         back_populates="messages",
+    )
+
+
+class PendingAction(Base):
+    __tablename__ = "pending_actions"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+    )
+
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "conversations.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    action_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True,
+    )
+
+    target_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+    target_identifier: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="pending",
+        index=True,
+    )
+
+    action_data: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    conversation: Mapped["Conversation"] = relationship(
+        back_populates="pending_actions",
     )
 
 
