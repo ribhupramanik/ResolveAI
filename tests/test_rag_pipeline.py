@@ -420,3 +420,86 @@ def test_cancellation_eligibility_not_found_is_failed_tool():
     assert result.tool_name == "check_cancellation_eligibility"
 
     assert result.tool_success is False
+
+
+def test_pipeline_preserves_tool_data():
+    tool_result = ToolResult(
+        tool_name=(
+            "check_cancellation_eligibility"
+        ),
+        success=True,
+        data={
+            "found": True,
+            "order_number": "ORD-10002",
+            "status": "processing",
+            "eligible": True,
+            "reason": (
+                "The order is still processing "
+                "and is eligible for cancellation."
+            ),
+            "requires_confirmation": True,
+            "action_performed": False,
+        },
+    )
+
+    pipeline = create_pipeline(
+        [
+            (
+                "ORD-10002 is eligible for "
+                "cancellation. No cancellation "
+                "has been performed."
+            )
+        ],
+        tool_result=tool_result,
+    )
+
+    result = pipeline.run(
+        "Can I cancel ORD-10002?"
+    )
+
+    assert result.tool_used is True
+
+    assert (
+        result.tool_name
+        == "check_cancellation_eligibility"
+    )
+
+    assert result.tool_success is True
+
+    assert result.tool_data is not None
+
+    assert (
+        result.tool_data["order_number"]
+        == "ORD-10002"
+    )
+
+    assert result.tool_data["eligible"] is True
+
+    assert (
+        result.tool_data["requires_confirmation"]
+        is True
+    )
+
+    assert (
+        result.tool_data["action_performed"]
+        is False
+    )
+
+def test_pipeline_without_tool_has_no_tool_data():
+    pipeline = create_pipeline(
+        [
+            (
+                "I don't have enough verified "
+                "information to confirm that."
+            )
+        ]
+    )
+
+    result = pipeline.run(
+        "What is your refund policy?"
+    )
+
+    assert result.tool_used is False
+    assert result.tool_name is None
+    assert result.tool_success is None
+    assert result.tool_data is None

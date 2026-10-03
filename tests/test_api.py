@@ -24,12 +24,14 @@ class FakePipeline:
         tool_used: bool = False,
         tool_name: str | None = None,
         tool_success: bool | None = None,
+        tool_data=None,
     ):
         self.should_fail = should_fail
 
         self.tool_used = tool_used
         self.tool_name = tool_name
         self.tool_success = tool_success
+        self.tool_data = tool_data
 
     def run(
         self,
@@ -61,6 +63,7 @@ class FakePipeline:
             tool_used=self.tool_used,
             tool_name=self.tool_name,
             tool_success=self.tool_success,
+            tool_data=self.tool_data,
             attempts=2,
             used_fallback=False,
             validation_issues=[

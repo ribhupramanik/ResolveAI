@@ -11,6 +11,7 @@ from src.rag.prompt_builder import PromptBuilder, PromptPayload
 from src.rag.response_validator import ResponseValidator, ValidationIssue
 from src.rag.system_capabilities import SystemCapabilitiesProvider
 from src.tools.router import ToolRouter
+from typing import Any
 
 SAFE_FALLBACK = (
     "I'm sorry, but I don't have enough verified information "
@@ -36,6 +37,7 @@ class RAGResult:
     tool_used: bool
     tool_name: str | None
     tool_success: bool | None
+    tool_data: dict[str, Any] | None
 
     attempts: int
     used_fallback: bool
@@ -99,6 +101,12 @@ class ResolveAIPipeline:
             history,
         )
 
+        tool_data = (
+            dict(tool_result.data)
+            if tool_result is not None
+            else None
+        )
+
         operational_context = build_operational_context(tool_result)
 
         contextual_query = self._build_contextual_query(
@@ -150,6 +158,7 @@ class ResolveAIPipeline:
                 tool_used=operational_context.tool_used,
                 tool_name=operational_context.tool_name,
                 tool_success=operational_context.tool_success,
+                tool_data=tool_data,
                 attempts=1,
                 used_fallback=False,
                 validation_issues=[],
@@ -182,6 +191,7 @@ class ResolveAIPipeline:
                 tool_used=operational_context.tool_used,
                 tool_name=operational_context.tool_name,
                 tool_success=operational_context.tool_success,
+                tool_data=tool_data,
                 attempts=2,
                 used_fallback=False,
                 validation_issues=(first_validation.issues),
@@ -203,6 +213,7 @@ class ResolveAIPipeline:
             tool_used=operational_context.tool_used,
             tool_name=operational_context.tool_name,
             tool_success=operational_context.tool_success,
+            tool_data=tool_data,
             attempts=2,
             used_fallback=True,
             validation_issues=all_issues,
