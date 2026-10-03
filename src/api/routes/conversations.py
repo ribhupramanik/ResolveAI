@@ -40,6 +40,9 @@ from src.rag.conversation import (
 from src.rag.pipeline import (
     ResolveAIPipeline,
 )
+from src.services.pending_action_integration import (
+    maybe_create_pending_cancellation,
+)
 
 router = APIRouter(
     prefix="/conversations",
@@ -249,6 +252,16 @@ def send_message(
             conversation_history=(
                 conversation_history
             ),
+        )
+
+        # If the cancellation-eligibility tool confirms
+        # that an order is eligible and requires explicit
+        # confirmation, persist a pending cancellation
+        # action for this conversation.
+        maybe_create_pending_cancellation(
+            db=db,
+            conversation_id=conversation.id,
+            result=result,
         )
 
         retry_trigger_issues = [

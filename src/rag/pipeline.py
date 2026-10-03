@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 
 from src.rag.context_builder import ContextBuilder
 from src.rag.conversation import ConversationTurn
@@ -11,7 +12,6 @@ from src.rag.prompt_builder import PromptBuilder, PromptPayload
 from src.rag.response_validator import ResponseValidator, ValidationIssue
 from src.rag.system_capabilities import SystemCapabilitiesProvider
 from src.tools.router import ToolRouter
-from typing import Any
 
 SAFE_FALLBACK = (
     "I'm sorry, but I don't have enough verified information "
@@ -101,11 +101,7 @@ class ResolveAIPipeline:
             history,
         )
 
-        tool_data = (
-            dict(tool_result.data)
-            if tool_result is not None
-            else None
-        )
+        tool_data = dict(tool_result.data) if tool_result is not None else None
 
         operational_context = build_operational_context(tool_result)
 
