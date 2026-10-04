@@ -529,12 +529,50 @@ def send_message(
                 raise RuntimeError("Handled pending action has no action.")
 
             if pending_decision.decision == "confirmed":
-                assistant_text = (
-                    f"Cancellation of "
-                    f"{action.target_identifier} "
-                    f"has been confirmed. "
-                    f"No cancellation has been performed yet."
+                # resolve_pending_action_response() has already
+                # changed the action from pending -> confirmed,
+                # but it has NOT committed.
+                #
+                # Execute inside this same transaction so the
+                # confirmation, cancellation, audit, user
+                # message, and assistant message either all
+                # commit together or all roll back together.
+                execution_result = CancellationExecutionService(db).execute(action.id)
+
+                should_commit = (
+                    execution_result.success
+                    or execution_result.action_status == INVALIDATED
                 )
+
+                if not should_commit:
+                    raise RuntimeError(execution_result.reason)
+
+                if execution_result.executed:
+                    assistant_text = (
+                        f"Order "
+                        f"{execution_result.order_number} "
+                        f"has been cancelled successfully."
+                    )
+
+                elif execution_result.already_executed:
+                    assistant_text = (
+                        f"Order {execution_result.order_number} was already cancelled."
+                    )
+
+                elif execution_result.action_status == INVALIDATED:
+                    target_identifier = (
+                        execution_result.order_number or action.target_identifier
+                    )
+
+                    assistant_text = (
+                        f"The cancellation for "
+                        f"{target_identifier} "
+                        f"could not be completed. "
+                        f"{execution_result.reason}"
+                    )
+
+                else:
+                    raise RuntimeError("Unexpected cancellation execution result.")
 
             elif pending_decision.decision == "rejected":
                 assistant_text = (
@@ -574,6 +612,15 @@ def send_message(
 
             conversation.updated_at = datetime.now(timezone.utc)
 
+            # This is the only commit.
+            #
+            # For typed confirmation it atomically commits:
+            # - the user's "yes" message
+            # - pending -> confirmed
+            # - order cancellation / invalidation
+            # - pending -> executed / invalidated
+            # - execution audit
+            # - assistant result message
             db.commit()
 
             db.refresh(user_message)

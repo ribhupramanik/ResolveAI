@@ -144,16 +144,22 @@ def create_pending_cancellation(
     )
 
 
-def test_yes_confirms_pending_action_without_pipeline(
+def test_yes_executes_pending_cancellation_without_pipeline(
     client,
     db,
-    conversation,
+    execution_case_factory,
     fake_pipeline,
 ):
-    action = create_pending_cancellation(
-        db,
-        conversation,
+    case = execution_case_factory(
+        action_status="pending",
     )
+
+    order = case["order"]
+    conversation = case["conversation"]
+    action = case["action"]
+
+    assert order.status == "processing"
+    assert action.status == "pending"
 
     response = client.post(
         (f"/api/v1/conversations/{conversation.id}/messages"),
@@ -164,22 +170,45 @@ def test_yes_confirms_pending_action_without_pipeline(
 
     assert response.status_code == 201
 
-    db.refresh(action)
+    db.expire_all()
 
-    assert action.status == "confirmed"
-    assert action.confirmed_at is not None
+    stored_order = db.get(
+        Order,
+        order.id,
+    )
 
-    assert action.action_data["action_performed"] is False
+    stored_action = db.get(
+        PendingAction,
+        action.id,
+    )
+
+    audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action.id
+        )
+    )
 
     assert fake_pipeline.run_calls == 0
+
+    assert stored_order is not None
+    assert stored_order.status == "cancelled"
+
+    assert stored_action is not None
+    assert stored_action.status == "executed"
+    assert stored_action.confirmed_at is not None
+
+    assert stored_action.action_data["action_performed"] is True
+
+    assert audit is not None
+    assert audit.outcome == "executed"
+    assert audit.action_performed is True
 
     data = response.json()
 
     assert data["assistant_message"]["content"] == (
-        "Cancellation of ORD-10002 "
-        "has been confirmed. "
-        "No cancellation has been performed yet."
+        f"Order {order.order_number} has been cancelled successfully."
     )
+
     assert data["pending_action"] is None
 
 
