@@ -57,7 +57,10 @@ from src.services.pending_action_integration import (
     maybe_create_pending_cancellation,
 )
 from src.services.pending_action_service import (
+    CONFIRMED,
+    EXECUTED,
     INVALIDATED,
+    PENDING,
     PendingActionService,
 )
 
@@ -266,6 +269,115 @@ def execute_pending_action(
         raise HTTPException(
             status_code=(status.HTTP_500_INTERNAL_SERVER_ERROR),
             detail=("Cancellation execution failed."),
+        ) from exc
+
+    return CancellationExecutionResponse(
+        action_id=action_id,
+        success=result.success,
+        executed=result.executed,
+        already_executed=(result.already_executed),
+        action_status=result.action_status,
+        order_number=result.order_number,
+        order_status=result.order_status,
+        reason=result.reason,
+    )
+
+
+@router.post(
+    "/{conversation_id}/pending-actions/{action_id}/confirm-and-execute",
+    response_model=CancellationExecutionResponse,
+)
+def confirm_and_execute_pending_action(
+    conversation_id: int,
+    action_id: int,
+    db: DatabaseDependency,
+) -> CancellationExecutionResponse:
+
+    conversation = db.get(
+        Conversation,
+        conversation_id,
+    )
+
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found.",
+        )
+
+    try:
+        # This is the transaction's first authoritative
+        # read of the action. Lock it immediately.
+        action = db.scalar(
+            select(PendingAction).where(PendingAction.id == action_id).with_for_update()
+        )
+
+        if action is None or action.conversation_id != conversation.id:
+            db.rollback()
+
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Pending action not found.",
+            )
+
+        if action.action_type != "cancel_order" or action.target_type != "order":
+            db.rollback()
+
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=("Pending action cannot be executed by this endpoint."),
+            )
+
+        # Clicking the explicit Confirm cancellation
+        # button is the confirmation event.
+        if action.status == PENDING:
+            action.status = CONFIRMED
+            action.confirmed_at = datetime.now(timezone.utc)
+
+            db.flush()
+
+        # Allow a retry after confirmation or execution.
+        # EXECUTED is handled idempotently by the
+        # execution service.
+        elif action.status not in {
+            CONFIRMED,
+            EXECUTED,
+        }:
+            current_status = action.status
+
+            db.rollback()
+
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Cancellation cannot be confirmed "
+                    f"because the action is "
+                    f"'{current_status}'."
+                ),
+            )
+
+        result = CancellationExecutionService(db).execute(action_id)
+
+        should_commit = result.success or result.action_status == INVALIDATED
+
+        if not should_commit:
+            db.rollback()
+
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=result.reason,
+            )
+
+        db.commit()
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=(status.HTTP_500_INTERNAL_SERVER_ERROR),
+            detail=("Cancellation confirmation and execution failed."),
         ) from exc
 
     return CancellationExecutionResponse(

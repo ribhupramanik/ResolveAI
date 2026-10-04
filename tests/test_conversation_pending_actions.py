@@ -915,3 +915,312 @@ def test_execute_cancellation_endpoint_is_idempotent(
 
     assert len(audits) == 1
     assert audits[0].outcome == "executed"
+
+
+def test_confirm_and_execute_pending_cancellation_via_api(
+    client,
+    db,
+    execution_case_factory,
+):
+    case = execution_case_factory(
+        action_status="pending",
+    )
+
+    order = case["order"]
+    conversation = case["conversation"]
+    action = case["action"]
+
+    assert action.status == "pending"
+    assert action.confirmed_at is None
+    assert order.status == "processing"
+
+    response = client.post(
+        f"/api/v1/conversations/"
+        f"{conversation.id}/pending-actions/"
+        f"{action.id}/confirm-and-execute"
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data == {
+        "action_id": action.id,
+        "success": True,
+        "executed": True,
+        "already_executed": False,
+        "action_status": "executed",
+        "order_number": order.order_number,
+        "order_status": "cancelled",
+        "reason": ("Order cancellation executed successfully."),
+    }
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order.id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action.id,
+    )
+
+    audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action.id
+        )
+    )
+
+    assert stored_order is not None
+    assert stored_order.status == "cancelled"
+
+    assert stored_action is not None
+    assert stored_action.status == "executed"
+    assert stored_action.confirmed_at is not None
+    assert stored_action.action_data["action_performed"] is True
+
+    assert audit is not None
+    assert audit.outcome == "executed"
+    assert audit.action_performed is True
+
+
+def test_confirm_and_execute_endpoint_is_idempotent(
+    client,
+    db,
+    execution_case_factory,
+):
+    case = execution_case_factory(
+        action_status="pending",
+    )
+
+    order = case["order"]
+    conversation = case["conversation"]
+    action = case["action"]
+
+    url = (
+        f"/api/v1/conversations/"
+        f"{conversation.id}/pending-actions/"
+        f"{action.id}/confirm-and-execute"
+    )
+
+    first_response = client.post(url)
+    second_response = client.post(url)
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+    first = first_response.json()
+    second = second_response.json()
+
+    assert first["success"] is True
+    assert first["executed"] is True
+    assert first["already_executed"] is False
+
+    assert second["success"] is True
+    assert second["executed"] is False
+    assert second["already_executed"] is True
+
+    assert first["action_status"] == "executed"
+    assert second["action_status"] == "executed"
+
+    assert first["order_status"] == "cancelled"
+    assert second["order_status"] == "cancelled"
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order.id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action.id,
+    )
+
+    audits = db.scalars(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action.id
+        )
+    ).all()
+
+    assert stored_order.status == "cancelled"
+    assert stored_action.status == "executed"
+
+    assert len(audits) == 1
+    assert audits[0].outcome == "executed"
+
+
+def test_confirm_and_execute_invalidates_if_order_shipped(
+    client,
+    db,
+    execution_case_factory,
+):
+    case = execution_case_factory(
+        action_status="pending",
+    )
+
+    order = case["order"]
+    conversation = case["conversation"]
+    action = case["action"]
+
+    # Eligibility was originally checked while
+    # the order was processing.
+    #
+    # Simulate fulfilment shipping the order before
+    # the customer clicks Confirm cancellation.
+    order.status = "shipped"
+    db.commit()
+
+    response = client.post(
+        f"/api/v1/conversations/"
+        f"{conversation.id}/pending-actions/"
+        f"{action.id}/confirm-and-execute"
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["success"] is False
+    assert data["executed"] is False
+    assert data["already_executed"] is False
+
+    assert data["action_status"] == "invalidated"
+    assert data["order_status"] == "shipped"
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order.id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action.id,
+    )
+
+    audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action.id
+        )
+    )
+
+    assert stored_order is not None
+    assert stored_order.status == "shipped"
+
+    assert stored_action is not None
+    assert stored_action.status == "invalidated"
+
+    # The customer really did confirm, even though
+    # execution was blocked by the latest order state.
+    assert stored_action.confirmed_at is not None
+
+    assert stored_action.action_data["action_performed"] is False
+
+    assert audit is not None
+    assert audit.outcome == "invalidated"
+    assert audit.action_performed is False
+
+    assert audit.previous_target_status == "shipped"
+    assert audit.final_target_status == "shipped"
+
+
+def test_confirm_and_execute_rejected_action_is_rejected(
+    client,
+    db,
+    execution_case_factory,
+):
+    case = execution_case_factory(
+        action_status="rejected",
+    )
+
+    order = case["order"]
+    conversation = case["conversation"]
+    action = case["action"]
+
+    response = client.post(
+        f"/api/v1/conversations/"
+        f"{conversation.id}/pending-actions/"
+        f"{action.id}/confirm-and-execute"
+    )
+
+    assert response.status_code == 409
+
+    assert response.json() == {
+        "detail": ("Cancellation cannot be confirmed because the action is 'rejected'.")
+    }
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order.id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action.id,
+    )
+
+    audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action.id
+        )
+    )
+
+    assert stored_order is not None
+    assert stored_order.status == "processing"
+
+    assert stored_action is not None
+    assert stored_action.status == "rejected"
+
+    assert audit is None
+
+
+def test_confirm_and_execute_cannot_use_another_conversation(
+    client,
+    db,
+    execution_case_factory,
+):
+    first = execution_case_factory(
+        action_status="pending",
+    )
+
+    second = execution_case_factory(
+        action_status="pending",
+    )
+
+    action = first["action"]
+    order = first["order"]
+
+    wrong_conversation = second["conversation"]
+
+    response = client.post(
+        f"/api/v1/conversations/"
+        f"{wrong_conversation.id}/pending-actions/"
+        f"{action.id}/confirm-and-execute"
+    )
+
+    assert response.status_code == 404
+
+    assert response.json() == {"detail": "Pending action not found."}
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order.id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action.id,
+    )
+
+    assert stored_order.status == "processing"
+    assert stored_action.status == "pending"
+    assert stored_action.confirmed_at is None
