@@ -28,9 +28,7 @@ class RefundStatusTool:
                     data={
                         "order_found": False,
                         "refund_found": False,
-                        "order_number": (
-                            result.order_number
-                        ),
+                        "order_number": (result.order_number),
                     },
                     error="Order not found.",
                 )
@@ -42,9 +40,7 @@ class RefundStatusTool:
                     data={
                         "order_found": True,
                         "refund_found": False,
-                        "order_number": (
-                            result.order_number
-                        ),
+                        "order_number": (result.order_number),
                     },
                 )
 
@@ -54,34 +50,24 @@ class RefundStatusTool:
                 data={
                     "order_found": True,
                     "refund_found": True,
-                    "order_number": (
-                        result.order_number
-                    ),
-                    "refund_number": (
-                        result.refund_number
-                    ),
+                    "order_number": (result.order_number),
+                    "refund_number": (result.refund_number),
                     "status": result.status,
                     "amount": (
-                        str(result.amount)
-                        if result.amount is not None
-                        else None
+                        str(result.amount) if result.amount is not None else None
                     ),
                     "currency": result.currency,
                     "initiated_at": (
                         result.initiated_at.isoformat()
-                        if result.initiated_at
-                        is not None
+                        if result.initiated_at is not None
                         else None
                     ),
                     "completed_at": (
                         result.completed_at.isoformat()
-                        if result.completed_at
-                        is not None
+                        if result.completed_at is not None
                         else None
                     ),
-                    "failure_reason": (
-                        result.failure_reason
-                    ),
+                    "failure_reason": (result.failure_reason),
                 },
             )
 
@@ -92,9 +78,7 @@ class RefundStatusTool:
                 data={
                     "order_number": order_number,
                 },
-                error=(
-                    "Refund status lookup failed."
-                ),
+                error=("Refund status lookup failed."),
             )
 
         finally:
