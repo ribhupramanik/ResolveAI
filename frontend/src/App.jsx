@@ -6,6 +6,7 @@ import {
   getConversationMessages,
   getConversations,
   getPendingAction,
+  rejectPendingAction,
   sendConversationMessage,
 } from "./api/conversations";
 
@@ -197,17 +198,16 @@ function App() {
       }
 
       if (decision === "reject") {
-        const data = await sendConversationMessage(activeConversationId, "no");
+        const action = pendingAction;
 
-        setMessages((current) => [
-          ...current,
-          data.user_message,
-          data.assistant_message,
-        ]);
+        await rejectPendingAction(activeConversationId, action.id);
 
-        setMetadata(data.metadata);
-
-        setPendingAction(data.pending_action);
+        // The backend persists the deterministic
+        // rejection message and changes the exact
+        // PendingAction to rejected.
+        //
+        // Reload the authoritative conversation state.
+        await loadConversationData(activeConversationId);
 
         await loadConversations();
 
