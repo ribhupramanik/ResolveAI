@@ -61,6 +61,7 @@ from src.services.pending_action_service import (
     EXECUTED,
     INVALIDATED,
     PENDING,
+    REJECTED,
     PendingActionService,
 )
 
@@ -423,6 +424,114 @@ def confirm_and_execute_pending_action(
         order_number=result.order_number,
         order_status=result.order_status,
         reason=result.reason,
+    )
+
+
+@router.post(
+    "/{conversation_id}/pending-actions/{action_id}/reject",
+    response_model=PendingActionResponse,
+)
+def reject_pending_action_by_id(
+    conversation_id: int,
+    action_id: int,
+    db: DatabaseDependency,
+) -> PendingActionResponse:
+
+    conversation = db.get(
+        Conversation,
+        conversation_id,
+    )
+
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found.",
+        )
+
+    try:
+        # Lock the exact action selected by the UI.
+        action = db.scalar(
+            select(PendingAction).where(PendingAction.id == action_id).with_for_update()
+        )
+
+        if action is None or action.conversation_id != conversation.id:
+            db.rollback()
+
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Pending action not found.",
+            )
+
+        if action.action_type != "cancel_order" or action.target_type != "order":
+            db.rollback()
+
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=("Pending action cannot be rejected by this endpoint."),
+            )
+
+        # First rejection:
+        # pending -> rejected
+        if action.status == PENDING:
+            action.status = REJECTED
+
+            assistant_text = (
+                f"The pending cancellation request for "
+                f"{action.target_identifier} "
+                f"has been rejected. "
+                f"No cancellation has been performed."
+            )
+
+            assistant_message = Message(
+                conversation_id=conversation.id,
+                role="assistant",
+                content=assistant_text,
+                ai_metadata=None,
+            )
+
+            db.add(assistant_message)
+
+            conversation.updated_at = datetime.now(timezone.utc)
+
+            db.flush()
+
+        # Retry/double-click after rejection:
+        # return success without writing another message.
+        elif action.status == REJECTED:
+            pass
+
+        else:
+            current_status = action.status
+
+            db.rollback()
+
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Cancellation cannot be rejected "
+                    f"because the action is "
+                    f"'{current_status}'."
+                ),
+            )
+
+        db.commit()
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=(status.HTTP_500_INTERNAL_SERVER_ERROR),
+            detail=("Cancellation rejection failed."),
+        ) from exc
+
+    return PendingActionResponse(
+        id=action.id,
+        action_type=action.action_type,
+        target_identifier=(action.target_identifier),
+        status=action.status,
     )
 
 

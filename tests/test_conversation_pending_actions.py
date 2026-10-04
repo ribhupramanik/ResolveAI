@@ -1300,3 +1300,237 @@ def test_confirm_and_execute_cannot_use_another_conversation(
     assert stored_order.status == "processing"
     assert stored_action.status == "pending"
     assert stored_action.confirmed_at is None
+
+
+def test_reject_pending_action_via_exact_id(
+    client,
+    db,
+    execution_case_factory,
+    fake_pipeline,
+):
+    case = execution_case_factory(
+        action_status="pending",
+    )
+
+    order = case["order"]
+    conversation = case["conversation"]
+    action = case["action"]
+
+    response = client.post(
+        f"/api/v1/conversations/{conversation.id}/pending-actions/{action.id}/reject"
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data == {
+        "id": action.id,
+        "action_type": "cancel_order",
+        "target_identifier": order.order_number,
+        "status": "rejected",
+    }
+
+    assert fake_pipeline.run_calls == 0
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order.id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action.id,
+    )
+
+    audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action.id
+        )
+    )
+
+    assert stored_order is not None
+    assert stored_order.status == "processing"
+
+    assert stored_action is not None
+    assert stored_action.status == "rejected"
+    assert stored_action.confirmed_at is None
+
+    assert stored_action.action_data["action_performed"] is False
+
+    assert audit is None
+
+    messages_response = client.get(f"/api/v1/conversations/{conversation.id}/messages")
+
+    assert messages_response.status_code == 200
+
+    messages = messages_response.json()
+
+    assert len(messages) == 1
+
+    assert messages[0]["role"] == "assistant"
+
+    assert messages[0]["content"] == (
+        f"The pending cancellation request for "
+        f"{order.order_number} has been rejected. "
+        f"No cancellation has been performed."
+    )
+
+
+def test_reject_action_cannot_use_another_conversation(
+    client,
+    db,
+    execution_case_factory,
+):
+    first = execution_case_factory(
+        action_status="pending",
+    )
+
+    second = execution_case_factory(
+        action_status="pending",
+    )
+
+    action = first["action"]
+    order = first["order"]
+
+    wrong_conversation = second["conversation"]
+
+    response = client.post(
+        f"/api/v1/conversations/"
+        f"{wrong_conversation.id}/"
+        f"pending-actions/"
+        f"{action.id}/reject"
+    )
+
+    assert response.status_code == 404
+
+    assert response.json() == {"detail": "Pending action not found."}
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order.id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action.id,
+    )
+
+    assert stored_order is not None
+    assert stored_order.status == "processing"
+
+    assert stored_action is not None
+    assert stored_action.status == "pending"
+
+
+def test_reject_pending_action_endpoint_is_idempotent(
+    client,
+    db,
+    execution_case_factory,
+):
+    case = execution_case_factory(
+        action_status="pending",
+    )
+
+    order = case["order"]
+    conversation = case["conversation"]
+    action = case["action"]
+
+    url = f"/api/v1/conversations/{conversation.id}/pending-actions/{action.id}/reject"
+
+    first_response = client.post(url)
+    second_response = client.post(url)
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+    assert first_response.json()["status"] == "rejected"
+    assert second_response.json()["status"] == "rejected"
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order.id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action.id,
+    )
+
+    assert stored_order is not None
+    assert stored_order.status == "processing"
+
+    assert stored_action is not None
+    assert stored_action.status == "rejected"
+
+    messages_response = client.get(f"/api/v1/conversations/{conversation.id}/messages")
+
+    assert messages_response.status_code == 200
+
+    messages = messages_response.json()
+
+    rejection_messages = [
+        message
+        for message in messages
+        if (
+            message["role"] == "assistant"
+            and message["content"]
+            == (
+                f"The pending cancellation request for "
+                f"{order.order_number} has been rejected. "
+                f"No cancellation has been performed."
+            )
+        )
+    ]
+
+    assert len(rejection_messages) == 1
+
+
+def test_executed_action_cannot_be_rejected(
+    client,
+    db,
+    execution_case_factory,
+):
+    case = execution_case_factory(
+        action_status="confirmed",
+    )
+
+    order = case["order"]
+    conversation = case["conversation"]
+    action = case["action"]
+
+    execute_response = client.post(
+        f"/api/v1/conversations/{conversation.id}/pending-actions/{action.id}/execute"
+    )
+
+    assert execute_response.status_code == 200
+
+    reject_response = client.post(
+        f"/api/v1/conversations/{conversation.id}/pending-actions/{action.id}/reject"
+    )
+
+    assert reject_response.status_code == 409
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order.id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action.id,
+    )
+
+    assert stored_order is not None
+    assert stored_order.status == "cancelled"
+
+    assert stored_action is not None
+    assert stored_action.status == "executed"
