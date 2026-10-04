@@ -385,3 +385,80 @@ class Order(Base):
     customer: Mapped["Customer"] = relationship(
         back_populates="orders",
     )
+
+    refunds: Mapped[list["Refund"]] = relationship(
+        back_populates="order",
+        order_by="Refund.created_at",
+    )
+
+
+class Refund(Base):
+    __tablename__ = "refunds"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+    )
+
+    refund_number: Mapped[str] = mapped_column(
+        String(40),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "orders.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        index=True,
+    )
+
+    amount: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2),
+        nullable=False,
+    )
+
+    currency: Mapped[str] = mapped_column(
+        String(3),
+        nullable=False,
+        default="INR",
+    )
+
+    initiated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    failure_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    order: Mapped["Order"] = relationship(
+        back_populates="refunds",
+    )
