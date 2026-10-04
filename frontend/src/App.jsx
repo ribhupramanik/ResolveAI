@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import {
+  confirmAndExecutePendingAction,
   createConversation,
   getConversationMessages,
   getConversations,
@@ -172,35 +173,102 @@ function App() {
   }
 
   async function handlePendingActionDecision(decision) {
-    if (!activeConversationId || !pendingAction || actionLoading || loading) {
+    if (
+      !activeConversationId ||
+      !pendingAction ||
+      actionLoading ||
+      loading
+    ) {
       return;
     }
-
-    const messageText = decision === "confirm" ? "yes" : "no";
 
     try {
       setActionLoading(true);
       setError("");
 
-      const data = await sendConversationMessage(
-        activeConversationId,
-        messageText,
+      if (decision === "confirm") {
+        const action = pendingAction;
+
+        const result =
+          await confirmAndExecutePendingAction(
+            activeConversationId,
+            action.id,
+          );
+
+        let assistantText;
+
+        if (
+          result.success &&
+          result.executed
+        ) {
+          assistantText =
+            `Order ${result.order_number} has been ` +
+            `cancelled successfully.`;
+        } else if (
+          result.success &&
+          result.already_executed
+        ) {
+          assistantText =
+            `Order ${result.order_number} was already cancelled.`;
+        } else if (
+          result.action_status === "invalidated"
+        ) {
+          assistantText =
+            `The cancellation could not be completed. ` +
+            `${result.reason}`;
+        } else {
+          assistantText = result.reason;
+        }
+
+        const actionMessage = {
+          id: `action-${action.id}-${crypto.randomUUID()}`,
+          conversation_id: activeConversationId,
+          role: "assistant",
+          content: assistantText,
+          created_at: new Date().toISOString(),
+        };
+
+        setMessages((current) => [
+          ...current,
+          actionMessage,
+        ]);
+
+        setPendingAction(null);
+
+        await loadConversations();
+
+        return;
+      }
+
+      if (decision === "reject") {
+        const data = await sendConversationMessage(
+          activeConversationId,
+          "no",
+        );
+
+        setMessages((current) => [
+          ...current,
+          data.user_message,
+          data.assistant_message,
+        ]);
+
+        setMetadata(data.metadata);
+
+        setPendingAction(data.pending_action);
+
+        await loadConversations();
+
+        return;
+      }
+
+      throw new Error(
+        "Unknown pending action decision.",
       );
-
-      setMessages((current) => [
-        ...current,
-        data.user_message,
-        data.assistant_message,
-      ]);
-
-      setMetadata(data.metadata);
-
-      setPendingAction(data.pending_action);
-
-      await loadConversations();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to process confirmation.",
+        err instanceof Error
+          ? err.message
+          : "Failed to process cancellation.",
       );
     } finally {
       setActionLoading(false);

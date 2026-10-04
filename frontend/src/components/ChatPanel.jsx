@@ -62,8 +62,8 @@ function ChatPanel({
                   </p>
 
                   <p className="mt-1 text-xs text-slate-500">
-                    No cancellation will be performed at this confirmation
-                    stage.
+                    Confirming will cancel the order immediately if it is
+                    still eligible.
                   </p>
                 </div>
               </div>
@@ -75,7 +75,7 @@ function ChatPanel({
                   onClick={() => onPendingActionDecision("confirm")}
                   className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {actionLoading ? "Processing..." : "Confirm cancellation"}
+                  {actionLoading ? "Cancelling..." : "Confirm cancellation"}
                 </button>
 
                 <button
@@ -106,7 +106,7 @@ function ChatPanel({
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             placeholder={
-              actionLoading ? "Processing confirmation..." : "Ask ResolveAI..."
+              actionLoading ? "Processing cancellation..." : "Ask ResolveAI..."
             }
             rows={2}
             disabled={actionLoading}

@@ -70,3 +70,34 @@ export async function sendConversationMessage(conversationId, message) {
 
   return response.json();
 }
+
+
+export async function confirmAndExecutePendingAction(
+  conversationId,
+  actionId,
+) {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/conversations/${conversationId}/pending-actions/${actionId}/confirm-and-execute`,
+    {
+      method: "POST",
+    },
+  );
+
+  if (!response.ok) {
+    let message = "Failed to cancel the order.";
+
+    try {
+      const data = await response.json();
+
+      if (data?.detail) {
+        message = data.detail;
+      }
+    } catch {
+      // Keep the fallback message.
+    }
+
+    throw new Error(message);
+  }
+
+  return response.json();
+}
