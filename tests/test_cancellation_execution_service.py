@@ -9,6 +9,7 @@ from src.db.models import (
     Conversation,
     Customer,
     Order,
+    PendingAction,
 )
 from src.services.cancellation_execution_service import (
     CancellationExecutionService,
@@ -17,6 +18,11 @@ from src.services.pending_action_service import (
     PendingActionService,
 )
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+from uuid import uuid4
+
+from sqlalchemy import delete, select
 
 @pytest.fixture
 def db():
@@ -300,3 +306,314 @@ def test_missing_pending_action_does_not_execute(
     assert result.already_executed is False
 
     assert result.action_id is None
+
+
+def test_execution_state_rolls_back_atomically(
+    db,
+):
+    order = create_order(
+        db,
+        suffix="005",
+    )
+
+    action = create_confirmed_action(
+        db,
+        order_number=order.order_number,
+        title="Atomic rollback test",
+    )
+
+    action_id = action.id
+    order_number = order.order_number
+
+    # Flush the initial confirmed state into the
+    # outer transaction before creating a savepoint.
+    db.flush()
+
+    savepoint = db.begin_nested()
+
+    result = CancellationExecutionService(
+        db
+    ).execute(action_id)
+
+    assert result.success is True
+    assert result.executed is True
+
+    # At this point all three changes have actually
+    # been flushed inside the savepoint.
+    changed_order = db.scalar(
+        select(Order).where(
+            Order.order_number == order_number
+        )
+    )
+
+    changed_action = db.get(
+        PendingAction,
+        action_id,
+    )
+
+    changed_audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id
+            == action_id
+        )
+    )
+
+    assert changed_order is not None
+    assert changed_order.status == "cancelled"
+
+    assert changed_action is not None
+    assert changed_action.status == "executed"
+
+    assert changed_audit is not None
+    assert changed_audit.outcome == "executed"
+
+    # Simulate the transaction owner deciding that
+    # the operation must be rolled back.
+    savepoint.rollback()
+
+    db.expire_all()
+
+    restored_order = db.scalar(
+        select(Order).where(
+            Order.order_number == order_number
+        )
+    )
+
+    restored_action = db.get(
+        PendingAction,
+        action_id,
+    )
+
+    restored_audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id
+            == action_id
+        )
+    )
+
+    assert restored_order is not None
+    assert restored_order.status == "processing"
+
+    assert restored_action is not None
+    assert restored_action.status == "confirmed"
+
+    assert restored_action.action_data[
+        "action_performed"
+    ] is False
+
+    assert restored_audit is None
+
+def test_two_sessions_cannot_execute_same_action_twice():
+    suffix = uuid4().hex[:8]
+
+    action_id = None
+    conversation_id = None
+    customer_id = None
+    order_number = None
+
+    setup_db = SessionLocal()
+
+    try:
+        order = create_order(
+            setup_db,
+            suffix=f"CONC-{suffix}",
+        )
+
+        action = create_confirmed_action(
+            setup_db,
+            order_number=order.order_number,
+            title="Concurrent cancellation test",
+        )
+
+        action_id = action.id
+        conversation_id = (
+            action.conversation_id
+        )
+        customer_id = order.customer_id
+        order_number = order.order_number
+
+        # Both worker sessions need to see the
+        # confirmed action, so commit test setup.
+        setup_db.commit()
+
+    finally:
+        setup_db.close()
+
+    barrier = Barrier(2)
+
+    def execute_worker():
+        worker_db = SessionLocal()
+
+        try:
+            # Make both workers start the execution
+            # attempt at approximately the same time.
+            barrier.wait(timeout=5)
+
+            result = CancellationExecutionService(
+                worker_db
+            ).execute(action_id)
+
+            worker_db.commit()
+
+            return result
+
+        except Exception:
+            worker_db.rollback()
+            raise
+
+        finally:
+            worker_db.close()
+
+    try:
+        with ThreadPoolExecutor(
+            max_workers=2
+        ) as executor:
+            first_future = executor.submit(
+                execute_worker
+            )
+
+            second_future = executor.submit(
+                execute_worker
+            )
+
+            first_result = first_future.result(
+                timeout=10
+            )
+
+            second_result = second_future.result(
+                timeout=10
+            )
+
+        results = [
+            first_result,
+            second_result,
+        ]
+
+        assert (
+            sum(
+                result.executed
+                for result in results
+            )
+            == 1
+        )
+
+        assert (
+            sum(
+                result.already_executed
+                for result in results
+            )
+            == 1
+        )
+
+        assert all(
+            result.success
+            for result in results
+        )
+
+        verify_db = SessionLocal()
+
+        try:
+            stored_order = verify_db.scalar(
+                select(Order).where(
+                    Order.order_number
+                    == order_number
+                )
+            )
+
+            stored_action = verify_db.get(
+                PendingAction,
+                action_id,
+            )
+
+            audits = verify_db.scalars(
+                select(
+                    ActionExecutionAudit
+                ).where(
+                    ActionExecutionAudit
+                    .pending_action_id
+                    == action_id
+                )
+            ).all()
+
+            assert stored_order is not None
+            assert stored_order.status == "cancelled"
+
+            assert stored_action is not None
+            assert stored_action.status == "executed"
+
+            assert len(audits) == 1
+
+            assert (
+                audits[0].outcome
+                == "executed"
+            )
+
+            assert (
+                audits[0].action_performed
+                is True
+            )
+
+        finally:
+            verify_db.close()
+
+    finally:
+        # This test commits its setup because two
+        # independent sessions must see the row.
+        # Clean everything up explicitly afterwards.
+        cleanup_db = SessionLocal()
+
+        try:
+            if action_id is not None:
+                cleanup_db.execute(
+                    delete(
+                        ActionExecutionAudit
+                    ).where(
+                        ActionExecutionAudit
+                        .pending_action_id
+                        == action_id
+                    )
+                )
+
+                cleanup_db.execute(
+                    delete(
+                        PendingAction
+                    ).where(
+                        PendingAction.id
+                        == action_id
+                    )
+                )
+
+            if order_number is not None:
+                cleanup_db.execute(
+                    delete(Order).where(
+                        Order.order_number
+                        == order_number
+                    )
+                )
+
+            if conversation_id is not None:
+                cleanup_db.execute(
+                    delete(Conversation).where(
+                        Conversation.id
+                        == conversation_id
+                    )
+                )
+
+            if customer_id is not None:
+                cleanup_db.execute(
+                    delete(Customer).where(
+                        Customer.id
+                        == customer_id
+                    )
+                )
+
+            cleanup_db.commit()
+
+        except Exception:
+            cleanup_db.rollback()
+            raise
+
+        finally:
+            cleanup_db.close()
+
+
