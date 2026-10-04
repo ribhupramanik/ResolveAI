@@ -367,6 +367,40 @@ def confirm_and_execute_pending_action(
                 detail=result.reason,
             )
 
+        # Persist the customer-visible result as part of the
+        # same transaction as the order/action/audit changes.
+        #
+        # Do not create another message for an idempotent
+        # retry after the cancellation has already executed.
+        assistant_text = None
+
+        if result.executed:
+            assistant_text = (
+                f"Order {result.order_number} has been cancelled successfully."
+            )
+
+        elif result.action_status == INVALIDATED:
+            target_identifier = result.order_number or action.target_identifier
+
+            assistant_text = (
+                f"The cancellation for "
+                f"{target_identifier} "
+                f"could not be completed. "
+                f"{result.reason}"
+            )
+
+        if assistant_text is not None:
+            assistant_message = Message(
+                conversation_id=conversation.id,
+                role="assistant",
+                content=assistant_text,
+                ai_metadata=None,
+            )
+
+            db.add(assistant_message)
+
+            conversation.updated_at = datetime.now(timezone.utc)
+
         db.commit()
 
     except HTTPException:

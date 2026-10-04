@@ -984,6 +984,21 @@ def test_confirm_and_execute_pending_cancellation_via_api(
     assert audit is not None
     assert audit.outcome == "executed"
     assert audit.action_performed is True
+    messages_response = client.get(f"/api/v1/conversations/{conversation.id}/messages")
+
+    assert messages_response.status_code == 200
+
+    messages = messages_response.json()
+
+    assistant_messages = [
+        message for message in messages if message["role"] == "assistant"
+    ]
+
+    assert len(assistant_messages) == 1
+
+    assert assistant_messages[0]["content"] == (
+        f"Order {order.order_number} has been cancelled successfully."
+    )
 
 
 def test_confirm_and_execute_endpoint_is_idempotent(
@@ -1051,6 +1066,23 @@ def test_confirm_and_execute_endpoint_is_idempotent(
 
     assert len(audits) == 1
     assert audits[0].outcome == "executed"
+    messages_response = client.get(f"/api/v1/conversations/{conversation.id}/messages")
+
+    assert messages_response.status_code == 200
+
+    messages = messages_response.json()
+
+    success_messages = [
+        message
+        for message in messages
+        if (
+            message["role"] == "assistant"
+            and message["content"]
+            == (f"Order {order.order_number} has been cancelled successfully.")
+        )
+    ]
+
+    assert len(success_messages) == 1
 
 
 def test_confirm_and_execute_invalidates_if_order_shipped(
@@ -1127,6 +1159,21 @@ def test_confirm_and_execute_invalidates_if_order_shipped(
 
     assert audit.previous_target_status == "shipped"
     assert audit.final_target_status == "shipped"
+    messages_response = client.get(f"/api/v1/conversations/{conversation.id}/messages")
+
+    assert messages_response.status_code == 200
+
+    messages = messages_response.json()
+
+    assistant_messages = [
+        message for message in messages if message["role"] == "assistant"
+    ]
+
+    assert len(assistant_messages) == 1
+
+    assert assistant_messages[0]["content"].startswith(
+        f"The cancellation for {order.order_number} could not be completed."
+    )
 
 
 def test_confirm_and_execute_rejected_action_is_rejected(
