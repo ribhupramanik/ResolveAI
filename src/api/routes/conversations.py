@@ -17,6 +17,9 @@ from src.api.dependencies import (
     get_db,
     get_pipeline,
 )
+from src.api.schemas.action_execution import (
+    CancellationExecutionResponse,
+)
 from src.api.schemas.chat import (
     ChatMetadata,
     ValidationIssueResponse,
@@ -36,12 +39,16 @@ from src.api.schemas.pending_action import (
 from src.db.models import (
     Conversation,
     Message,
+    PendingAction,
 )
 from src.rag.conversation import (
     ConversationTurn,
 )
 from src.rag.pipeline import (
     ResolveAIPipeline,
+)
+from src.services.cancellation_execution_service import (
+    CancellationExecutionService,
 )
 from src.services.pending_action_confirmation import (
     resolve_pending_action_response,
@@ -50,6 +57,7 @@ from src.services.pending_action_integration import (
     maybe_create_pending_cancellation,
 )
 from src.services.pending_action_service import (
+    INVALIDATED,
     PendingActionService,
 )
 
@@ -181,6 +189,94 @@ def get_pending_action(
         action_type=pending_action.action_type,
         target_identifier=(pending_action.target_identifier),
         status=pending_action.status,
+    )
+
+
+@router.post(
+    "/{conversation_id}/pending-actions/{action_id}/execute",
+    response_model=CancellationExecutionResponse,
+)
+def execute_pending_action(
+    conversation_id: int,
+    action_id: int,
+    db: DatabaseDependency,
+) -> CancellationExecutionResponse:
+
+    conversation = db.get(
+        Conversation,
+        conversation_id,
+    )
+
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found.",
+        )
+
+    # Read only the fields required for ownership/type
+    # validation here.
+    #
+    # Do not load the PendingAction ORM object before
+    # CancellationExecutionService acquires its row lock.
+    action_info = db.execute(
+        select(
+            PendingAction.conversation_id,
+            PendingAction.action_type,
+            PendingAction.target_type,
+        ).where(PendingAction.id == action_id)
+    ).one_or_none()
+
+    if action_info is None or action_info.conversation_id != conversation.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pending action not found.",
+        )
+
+    if action_info.action_type != "cancel_order" or action_info.target_type != "order":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=("Pending action cannot be executed by this endpoint."),
+        )
+
+    try:
+        result = CancellationExecutionService(db).execute(action_id)
+
+        # A successful/idempotent execution must commit.
+        #
+        # INVALIDATED must also commit because the service
+        # records the invalidation and its audit row.
+        should_commit = result.success or result.action_status == INVALIDATED
+
+        if not should_commit:
+            db.rollback()
+
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=result.reason,
+            )
+
+        db.commit()
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=(status.HTTP_500_INTERNAL_SERVER_ERROR),
+            detail=("Cancellation execution failed."),
+        ) from exc
+
+    return CancellationExecutionResponse(
+        action_id=action_id,
+        success=result.success,
+        executed=result.executed,
+        already_executed=(result.already_executed),
+        action_status=result.action_status,
+        order_number=result.order_number,
+        order_status=result.order_status,
+        reason=result.reason,
     )
 
 

@@ -1,7 +1,10 @@
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
+from threading import Barrier
+from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from src.db.database import SessionLocal
 from src.db.models import (
@@ -18,11 +21,6 @@ from src.services.pending_action_service import (
     PendingActionService,
 )
 
-from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier
-from uuid import uuid4
-
-from sqlalchemy import delete, select
 
 @pytest.fixture
 def db():
@@ -51,7 +49,7 @@ def create_order(
     db.flush()
 
     order = Order(
-        order_number=f"ORD-9{suffix}",
+        order_number=f"ORD-9{suffix}".upper(),
         customer_id=customer.id,
         status=status,
         payment_status="paid",
@@ -331,20 +329,14 @@ def test_execution_state_rolls_back_atomically(
 
     savepoint = db.begin_nested()
 
-    result = CancellationExecutionService(
-        db
-    ).execute(action_id)
+    result = CancellationExecutionService(db).execute(action_id)
 
     assert result.success is True
     assert result.executed is True
 
     # At this point all three changes have actually
     # been flushed inside the savepoint.
-    changed_order = db.scalar(
-        select(Order).where(
-            Order.order_number == order_number
-        )
-    )
+    changed_order = db.scalar(select(Order).where(Order.order_number == order_number))
 
     changed_action = db.get(
         PendingAction,
@@ -353,8 +345,7 @@ def test_execution_state_rolls_back_atomically(
 
     changed_audit = db.scalar(
         select(ActionExecutionAudit).where(
-            ActionExecutionAudit.pending_action_id
-            == action_id
+            ActionExecutionAudit.pending_action_id == action_id
         )
     )
 
@@ -373,11 +364,7 @@ def test_execution_state_rolls_back_atomically(
 
     db.expire_all()
 
-    restored_order = db.scalar(
-        select(Order).where(
-            Order.order_number == order_number
-        )
-    )
+    restored_order = db.scalar(select(Order).where(Order.order_number == order_number))
 
     restored_action = db.get(
         PendingAction,
@@ -386,8 +373,7 @@ def test_execution_state_rolls_back_atomically(
 
     restored_audit = db.scalar(
         select(ActionExecutionAudit).where(
-            ActionExecutionAudit.pending_action_id
-            == action_id
+            ActionExecutionAudit.pending_action_id == action_id
         )
     )
 
@@ -397,11 +383,10 @@ def test_execution_state_rolls_back_atomically(
     assert restored_action is not None
     assert restored_action.status == "confirmed"
 
-    assert restored_action.action_data[
-        "action_performed"
-    ] is False
+    assert restored_action.action_data["action_performed"] is False
 
     assert restored_audit is None
+
 
 def test_two_sessions_cannot_execute_same_action_twice():
     suffix = uuid4().hex[:8]
@@ -424,11 +409,9 @@ def test_two_sessions_cannot_execute_same_action_twice():
             order_number=order.order_number,
             title="Concurrent cancellation test",
         )
-
+        assert action.target_identifier == order.order_number
         action_id = action.id
-        conversation_id = (
-            action.conversation_id
-        )
+        conversation_id = action.conversation_id
         customer_id = order.customer_id
         order_number = order.order_number
 
@@ -449,9 +432,7 @@ def test_two_sessions_cannot_execute_same_action_twice():
             # attempt at approximately the same time.
             barrier.wait(timeout=5)
 
-            result = CancellationExecutionService(
-                worker_db
-            ).execute(action_id)
+            result = CancellationExecutionService(worker_db).execute(action_id)
 
             worker_db.commit()
 
@@ -465,59 +446,31 @@ def test_two_sessions_cannot_execute_same_action_twice():
             worker_db.close()
 
     try:
-        with ThreadPoolExecutor(
-            max_workers=2
-        ) as executor:
-            first_future = executor.submit(
-                execute_worker
-            )
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first_future = executor.submit(execute_worker)
 
-            second_future = executor.submit(
-                execute_worker
-            )
+            second_future = executor.submit(execute_worker)
 
-            first_result = first_future.result(
-                timeout=10
-            )
+            first_result = first_future.result(timeout=10)
 
-            second_result = second_future.result(
-                timeout=10
-            )
+            second_result = second_future.result(timeout=10)
 
         results = [
             first_result,
             second_result,
         ]
 
-        assert (
-            sum(
-                result.executed
-                for result in results
-            )
-            == 1
-        )
+        assert sum(result.executed for result in results) == 1
 
-        assert (
-            sum(
-                result.already_executed
-                for result in results
-            )
-            == 1
-        )
+        assert sum(result.already_executed for result in results) == 1
 
-        assert all(
-            result.success
-            for result in results
-        )
+        assert all(result.success for result in results)
 
         verify_db = SessionLocal()
 
         try:
             stored_order = verify_db.scalar(
-                select(Order).where(
-                    Order.order_number
-                    == order_number
-                )
+                select(Order).where(Order.order_number == order_number)
             )
 
             stored_action = verify_db.get(
@@ -526,12 +479,8 @@ def test_two_sessions_cannot_execute_same_action_twice():
             )
 
             audits = verify_db.scalars(
-                select(
-                    ActionExecutionAudit
-                ).where(
-                    ActionExecutionAudit
-                    .pending_action_id
-                    == action_id
+                select(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id == action_id
                 )
             ).all()
 
@@ -543,15 +492,9 @@ def test_two_sessions_cannot_execute_same_action_twice():
 
             assert len(audits) == 1
 
-            assert (
-                audits[0].outcome
-                == "executed"
-            )
+            assert audits[0].outcome == "executed"
 
-            assert (
-                audits[0].action_performed
-                is True
-            )
+            assert audits[0].action_performed is True
 
         finally:
             verify_db.close()
@@ -565,47 +508,27 @@ def test_two_sessions_cannot_execute_same_action_twice():
         try:
             if action_id is not None:
                 cleanup_db.execute(
-                    delete(
-                        ActionExecutionAudit
-                    ).where(
-                        ActionExecutionAudit
-                        .pending_action_id
-                        == action_id
+                    delete(ActionExecutionAudit).where(
+                        ActionExecutionAudit.pending_action_id == action_id
                     )
                 )
 
                 cleanup_db.execute(
-                    delete(
-                        PendingAction
-                    ).where(
-                        PendingAction.id
-                        == action_id
-                    )
+                    delete(PendingAction).where(PendingAction.id == action_id)
                 )
 
             if order_number is not None:
                 cleanup_db.execute(
-                    delete(Order).where(
-                        Order.order_number
-                        == order_number
-                    )
+                    delete(Order).where(Order.order_number == order_number)
                 )
 
             if conversation_id is not None:
                 cleanup_db.execute(
-                    delete(Conversation).where(
-                        Conversation.id
-                        == conversation_id
-                    )
+                    delete(Conversation).where(Conversation.id == conversation_id)
                 )
 
             if customer_id is not None:
-                cleanup_db.execute(
-                    delete(Customer).where(
-                        Customer.id
-                        == customer_id
-                    )
-                )
+                cleanup_db.execute(delete(Customer).where(Customer.id == customer_id))
 
             cleanup_db.commit()
 
@@ -615,5 +538,3 @@ def test_two_sessions_cannot_execute_same_action_twice():
 
         finally:
             cleanup_db.close()
-
-
