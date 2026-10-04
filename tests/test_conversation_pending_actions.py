@@ -1,6 +1,10 @@
+from decimal import Decimal
+from uuid import uuid4
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import delete, select
 
 from src.api.dependencies import (
     get_db,
@@ -8,7 +12,13 @@ from src.api.dependencies import (
 )
 from src.api.routes import conversations
 from src.db.database import SessionLocal
-from src.db.models import Conversation
+from src.db.models import (
+    ActionExecutionAudit,
+    Conversation,
+    Customer,
+    Order,
+    PendingAction,
+)
 from src.rag.pipeline import RAGResult
 from src.services.pending_action_service import (
     PendingActionService,
@@ -465,3 +475,443 @@ def test_ineligible_cancellation_returns_no_pending_action(
     service = PendingActionService(db)
 
     assert service.get_pending_action(conversation.id) is None
+
+
+@pytest.fixture
+def execution_case_factory(db):
+    created_cases = []
+
+    def create_case(
+        *,
+        action_status: str = "confirmed",
+        order_status: str = "processing",
+    ):
+        token = uuid4().hex[:10].upper()
+
+        numeric_suffix = str(uuid4().int % 10_000_000_000).zfill(10)
+
+        customer = Customer(
+            customer_code=f"CUST-API-{token}",
+            name=f"Execution API Test {token}",
+            email=(f"execution-api-{token.lower()}@example.com"),
+        )
+
+        db.add(customer)
+        db.flush()
+
+        order = Order(
+            order_number=f"ORD-{numeric_suffix}",
+            customer_id=customer.id,
+            status=order_status,
+            payment_status="paid",
+            total_amount=Decimal("999.00"),
+            currency="INR",
+            shipping_address="API test address",
+        )
+
+        db.add(order)
+        db.flush()
+
+        conversation = Conversation(
+            title="Execution API test",
+        )
+
+        db.add(conversation)
+        db.flush()
+
+        service = PendingActionService(db)
+
+        action = service.create_pending_action(
+            conversation_id=conversation.id,
+            action_type="cancel_order",
+            target_type="order",
+            target_identifier=order.order_number,
+            action_data={
+                "order_status": order_status,
+                "eligible": True,
+                "requires_confirmation": True,
+                "action_performed": False,
+            },
+        )
+
+        if action_status == "confirmed":
+            confirmed = service.confirm_pending_action(conversation.id)
+
+            assert confirmed is not None
+
+        elif action_status == "rejected":
+            rejected = service.reject_pending_action(conversation.id)
+
+            assert rejected is not None
+
+        elif action_status != "pending":
+            raise ValueError("Unsupported action status.")
+
+        # Important: the endpoint owns its own
+        # transaction and may commit or rollback.
+        # Therefore setup must already be committed.
+        db.commit()
+
+        db.refresh(customer)
+        db.refresh(order)
+        db.refresh(conversation)
+        db.refresh(action)
+
+        case = {
+            "customer": customer,
+            "order": order,
+            "conversation": conversation,
+            "action": action,
+        }
+
+        created_cases.append(
+            {
+                "customer_id": customer.id,
+                "order_id": order.id,
+                "conversation_id": conversation.id,
+                "action_id": action.id,
+            }
+        )
+
+        return case
+
+    yield create_case
+
+    # The execution endpoint can commit, so normal
+    # fixture rollback cannot clean these records.
+    db.rollback()
+
+    cleanup_db = SessionLocal()
+
+    try:
+        for case in reversed(created_cases):
+            cleanup_db.execute(
+                delete(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id == case["action_id"]
+                )
+            )
+
+            cleanup_db.execute(
+                delete(PendingAction).where(PendingAction.id == case["action_id"])
+            )
+
+            cleanup_db.execute(delete(Order).where(Order.id == case["order_id"]))
+
+            cleanup_db.execute(
+                delete(Conversation).where(Conversation.id == case["conversation_id"])
+            )
+
+            cleanup_db.execute(
+                delete(Customer).where(Customer.id == case["customer_id"])
+            )
+
+        cleanup_db.commit()
+
+    except Exception:
+        cleanup_db.rollback()
+        raise
+
+    finally:
+        cleanup_db.close()
+
+
+def test_execute_confirmed_cancellation_via_api(
+    client,
+    db,
+    execution_case_factory,
+):
+    case = execution_case_factory()
+
+    order = case["order"]
+    conversation = case["conversation"]
+    action = case["action"]
+
+    response = client.post(
+        f"/api/v1/conversations/{conversation.id}/pending-actions/{action.id}/execute"
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data == {
+        "action_id": action.id,
+        "success": True,
+        "executed": True,
+        "already_executed": False,
+        "action_status": "executed",
+        "order_number": order.order_number,
+        "order_status": "cancelled",
+        "reason": ("Order cancellation executed successfully."),
+    }
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order.id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action.id,
+    )
+
+    audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action.id
+        )
+    )
+
+    assert stored_order is not None
+    assert stored_order.status == "cancelled"
+
+    assert stored_action is not None
+    assert stored_action.status == "executed"
+
+    assert audit is not None
+    assert audit.outcome == "executed"
+    assert audit.action_performed is True
+
+
+def test_execute_pending_cancellation_is_rejected(
+    client,
+    db,
+    execution_case_factory,
+):
+    case = execution_case_factory(
+        action_status="pending",
+    )
+
+    order = case["order"]
+    conversation = case["conversation"]
+    action = case["action"]
+
+    response = client.post(
+        f"/api/v1/conversations/{conversation.id}/pending-actions/{action.id}/execute"
+    )
+
+    assert response.status_code == 409
+
+    assert response.json() == {"detail": ("Cancellation has not been confirmed.")}
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order.id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action.id,
+    )
+
+    audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action.id
+        )
+    )
+
+    assert stored_order.status == "processing"
+    assert stored_action.status == "pending"
+    assert audit is None
+
+
+def test_execute_rejected_cancellation_is_rejected(
+    client,
+    db,
+    execution_case_factory,
+):
+    case = execution_case_factory(
+        action_status="rejected",
+    )
+
+    order = case["order"]
+    conversation = case["conversation"]
+    action = case["action"]
+
+    response = client.post(
+        f"/api/v1/conversations/{conversation.id}/pending-actions/{action.id}/execute"
+    )
+
+    assert response.status_code == 409
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order.id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action.id,
+    )
+
+    audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action.id
+        )
+    )
+
+    assert stored_order.status == "processing"
+    assert stored_action.status == "rejected"
+    assert audit is None
+
+
+def test_action_cannot_execute_from_another_conversation(
+    client,
+    db,
+    execution_case_factory,
+):
+    first = execution_case_factory()
+    second = execution_case_factory()
+
+    action = first["action"]
+    order = first["order"]
+
+    wrong_conversation = second["conversation"]
+
+    response = client.post(
+        (  # noqa: UP034
+            f"/api/v1/conversations/"
+            f"{wrong_conversation.id}/"
+            f"pending-actions/"
+            f"{action.id}/execute"
+        )
+    )
+
+    assert response.status_code == 404
+
+    assert response.json() == {"detail": "Pending action not found."}
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order.id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action.id,
+    )
+
+    assert stored_order.status == "processing"
+    assert stored_action.status == "confirmed"
+
+
+def test_execute_cancellation_invalidates_if_order_shipped(
+    client,
+    db,
+    execution_case_factory,
+):
+    case = execution_case_factory()
+
+    order = case["order"]
+    conversation = case["conversation"]
+    action = case["action"]
+
+    # Simulate fulfilment changing the order
+    # after confirmation but before execution.
+    order.status = "shipped"
+    db.commit()
+
+    response = client.post(
+        f"/api/v1/conversations/{conversation.id}/pending-actions/{action.id}/execute"
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["success"] is False
+    assert data["executed"] is False
+    assert data["already_executed"] is False
+
+    assert data["action_status"] == "invalidated"
+    assert data["order_status"] == "shipped"
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order.id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action.id,
+    )
+
+    audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action.id
+        )
+    )
+
+    assert stored_order.status == "shipped"
+
+    assert stored_action.status == "invalidated"
+
+    assert audit is not None
+    assert audit.outcome == "invalidated"
+    assert audit.action_performed is False
+
+    assert audit.previous_target_status == "shipped"
+
+    assert audit.final_target_status == "shipped"
+
+
+def test_execute_cancellation_endpoint_is_idempotent(
+    client,
+    db,
+    execution_case_factory,
+):
+    case = execution_case_factory()
+
+    order = case["order"]
+    conversation = case["conversation"]
+    action = case["action"]
+
+    url = f"/api/v1/conversations/{conversation.id}/pending-actions/{action.id}/execute"
+
+    first_response = client.post(url)
+
+    second_response = client.post(url)
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+    first = first_response.json()
+    second = second_response.json()
+
+    assert first["success"] is True
+    assert first["executed"] is True
+    assert first["already_executed"] is False
+
+    assert second["success"] is True
+    assert second["executed"] is False
+    assert second["already_executed"] is True
+
+    assert first["order_status"] == "cancelled"
+    assert second["order_status"] == "cancelled"
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order.id,
+    )
+
+    audits = db.scalars(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action.id
+        )
+    ).all()
+
+    assert stored_order.status == "cancelled"
+
+    assert len(audits) == 1
+    assert audits[0].outcome == "executed"
