@@ -15,6 +15,11 @@
     "content": "ResolveAI can perform a read-only cancellation-eligibility check by order number through the registered check_cancellation_eligibility tool. This check does not cancel or modify the order. An eligible result does not mean that a cancellation has been performed."
   },
   {
+    "capability": "refund_status_lookup",
+    "available": true,
+    "content": "ResolveAI can perform a read-only refund-status lookup by order number through the registered get_refund_status tool. The tool may return whether a refund record exists, the refund number, status, amount, currency, initiated time, completed time, and failure reason when available. This lookup does not create, approve, process, retry, or modify a refund."
+  },
+  {
     "capability": "external_action_execution",
     "available": false,
     "content": "ResolveAI cannot modify, cancel, refund, update, submit, send, forward, route, escalate, or otherwise perform actions in external systems."

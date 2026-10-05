@@ -9,7 +9,7 @@
   },
   {
     "topic": "refund_status",
-    "content": "No live refund-status integration is currently available. ResolveAI cannot verify the current status of a customer's refund."
+    "content": "ResolveAI can retrieve the current refund status for a specific order through the registered read-only get_refund_status tool when that tool is available for the request. The lookup may return whether a refund record exists, the refund number, status, amount, currency, initiated time, completed time, and failure reason when available. This capability does not provide or imply a general refund processing or arrival timeline."
   },
   {
     "topic": "order_tracking",
