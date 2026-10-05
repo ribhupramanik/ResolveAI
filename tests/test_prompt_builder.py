@@ -354,3 +354,83 @@ def test_no_operational_data_fallback(
     )
 
     assert "No operational tool was used for this request." in result.user_prompt
+
+
+def test_refund_status_has_tool_specific_guidance(
+    prompt_builder,
+    sample_context,
+    verified_knowledge,
+    system_capabilities,
+):
+    operational_context = OperationalContext(
+        context=(
+            "Tool: get_refund_status\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- order_found: True\n"
+            "- refund_found: True\n"
+            "- order_number: ORD-10003\n"
+            "- refund_number: REF-10003\n"
+            "- status: processing\n"
+            "- amount: 1299.00\n"
+            "- currency: INR\n"
+            "- initiated_at: "
+            "2026-10-01T10:30:00+00:00\n"
+            "- completed_at: None\n"
+            "- failure_reason: None"
+        ),
+        tool_used=True,
+        tool_name="get_refund_status",
+        tool_success=True,
+    )
+
+    result = prompt_builder.build(
+        query=("Where is my refund for ORD-10003?"),
+        retrieved_context=sample_context,
+        verified_knowledge=verified_knowledge,
+        system_capabilities=(system_capabilities),
+        operational_context=(operational_context),
+    )
+
+    assert "For refund-status results:" in result.user_prompt
+
+    assert "Do not invent a refund timeline" in result.user_prompt
+
+    normalized_prompt = " ".join(result.user_prompt.split())
+
+    assert (
+        "Do not claim that a refund "
+        "was initiated, completed, or "
+        "modified by ResolveAI" in normalized_prompt
+    )
+
+
+def test_system_prompt_allows_successful_read_only_tool_checks(
+    prompt_builder,
+    sample_context,
+    verified_knowledge,
+    system_capabilities,
+):
+    operational_context = OperationalContext(
+        context=(
+            "Tool: get_refund_status\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- order_number: ORD-10003\n"
+            "- refund_found: True\n"
+            "- status: processing"
+        ),
+        tool_used=True,
+        tool_name="get_refund_status",
+        tool_success=True,
+    )
+
+    result = prompt_builder.build(
+        query=("Where is my refund for ORD-10003?"),
+        retrieved_context=sample_context,
+        verified_knowledge=verified_knowledge,
+        system_capabilities=(system_capabilities),
+        operational_context=(operational_context),
+    )
+
+    assert "successful registered read-only tool" in result.system_prompt

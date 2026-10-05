@@ -40,38 +40,78 @@ class PromptBuilder:
             and operational_context.tool_name == "check_cancellation_eligibility"
         ):
             operational_guidance = """
-        For cancellation-eligibility results:
+            For cancellation-eligibility results:
 
-        - Report the eligibility result exactly as supported by
-        OPERATIONAL DATA.
+            - Report the eligibility result exactly as supported by
+            OPERATIONAL DATA.
 
-        - If eligible is true, explain that the order is eligible
-        for cancellation.
+            - If eligible is true, explain that the order is eligible
+            for cancellation.
 
-        - If eligible is false, explain that the order is not
-        eligible and use the provided reason when available.
+            - If eligible is false, explain that the order is not
+            eligible and use the provided reason when available.
 
-        - action_performed=false means no cancellation or other
-        modification has been made.
+            - action_performed=false means no cancellation or other
+            modification has been made.
 
-        - Do not claim that the order has been cancelled.
+            - Do not claim that the order has been cancelled.
 
-        - Do not recommend contacting customer support, a help
-        center, a department, or another support route unless
-        VERIFIED KNOWLEDGE explicitly provides that route.
+            - Do not recommend contacting customer support, a help
+            center, a department, or another support route unless
+            VERIFIED KNOWLEDGE explicitly provides that route.
 
-        - Do not invent an alternative cancellation procedure.
+            - Do not invent an alternative cancellation procedure.
 
-        - Do not tell the customer where or how to cancel the
-        order. Do not mention account portals, order-management
-        pages, cancellation buttons, confirmation emails,
-        websites, apps, or support channels unless explicitly
-        provided by authoritative evidence.
+            - Do not tell the customer where or how to cancel the
+            order. Do not mention account portals, order-management
+            pages, cancellation buttons, confirmation emails,
+            websites, apps, or support channels unless explicitly
+            provided by authoritative evidence.
 
-        - At this stage, do not offer to perform the cancellation.
-        Only report eligibility and that no action has been
-        performed.
-        """.strip()
+            - At this stage, do not offer to perform the cancellation.
+            Only report eligibility and that no action has been
+            performed.
+            """.strip()
+
+        elif (
+            operational_context is not None
+            and operational_context.tool_name == "get_refund_status"
+        ):
+            operational_guidance = """
+            For refund-status results:
+
+            - Treat successful OPERATIONAL DATA as authoritative for
+            the refund fields actually returned by the tool.
+
+            - If refund_found is true, report the refund status and
+            other returned fields accurately.
+
+            - If order_found is true and refund_found is false,
+            explain only that no refund record was found for that
+            order. Do not imply that the refund failed or was denied.
+
+            - Use amount, currency, initiated_at, completed_at, and
+            failure_reason only when those values are actually
+            present.
+
+            - A completed_at value of None does not establish an
+            expected completion time.
+
+            - Do not invent a refund timeline, bank-processing time,
+            payment-provider procedure, or expected completion date.
+
+            - Do not claim that a refund was initiated, completed, or
+            modified by ResolveAI.
+
+            - get_refund_status is a read-only lookup. It does not
+            create, approve, process, retry, or modify a refund.
+
+            - Do not recommend a support route, bank, merchant,
+            payment provider, website, app, or portal unless that
+            route or procedure is supported by authoritative
+            evidence.
+            """.strip()
+
         else:
             operational_guidance = "No additional tool-specific guidance."
 
@@ -173,7 +213,17 @@ STRICT RULES:
 6. Never claim that ResolveAI checked, verified,
    reviewed, processed, changed, cancelled, refunded,
    contacted, escalated, routed, transferred, or
-   performed any external action unless SYSTEM CAPABILITIES explicitly confirms that capability.
+   performed any external action unless supported by
+   authoritative evidence.
+
+   A successful registered read-only tool may support
+   a claim that ResolveAI checked the specific
+   operational information returned by that tool.
+
+   This read-only exception does not authorize ResolveAI
+   to claim that it created, changed, cancelled,
+   refunded, processed, approved, retried, or otherwise
+   modified an external record.
 
 7. Do not promise future actions such as:
    "I will check",
