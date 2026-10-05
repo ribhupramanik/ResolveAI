@@ -12,47 +12,57 @@ class OperationalContext:
 
 
 def build_operational_context(
-    result: ToolResult | None,
+    result: ToolResult | list[ToolResult] | None,
 ) -> OperationalContext:
 
-    if result is None:
+    if result is None or result == []:
         return OperationalContext(
-            context=(
-                "No operational tool was used "
-                "for this request."
-            ),
+            context=("No operational tool was used for this request."),
             tool_used=False,
             tool_name=None,
             tool_success=None,
         )
 
-    if not result.success:
-        return OperationalContext(
-            context=(
-                f"Tool: {result.tool_name}\n"
+    if isinstance(result, ToolResult):
+        results = [result]
+    else:
+        results = result
+
+    context_blocks = []
+
+    for item in results:
+        if not item.success:
+            context_blocks.append(
+                f"Tool: {item.tool_name}\n"
                 "Tool status: failed\n"
-                f"Data: {result.data}\n"
-                f"Error: {result.error}"
-            ),
-            tool_used=True,
-            tool_name=result.tool_name,
-            tool_success=False,
+                f"Data: {item.data}\n"
+                f"Error: {item.error}"
+            )
+            continue
+
+        data_lines = [
+            f"- {key}: {value}" for key, value in item.data.items() if value is not None
+        ]
+
+        context_blocks.append(
+            f"Tool: {item.tool_name}\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n" + "\n".join(data_lines)
         )
 
-    data_lines = [
-        f"- {key}: {value}"
-        for key, value in result.data.items()
-        if value is not None
-    ]
+    if len(results) == 1:
+        only_result = results[0]
+
+        return OperationalContext(
+            context=context_blocks[0],
+            tool_used=True,
+            tool_name=only_result.tool_name,
+            tool_success=only_result.success,
+        )
 
     return OperationalContext(
-        context=(
-            f"Tool: {result.tool_name}\n"
-            "Tool status: success\n"
-            "Authoritative operational data:\n"
-            + "\n".join(data_lines)
-        ),
+        context="\n\n".join(context_blocks),
         tool_used=True,
-        tool_name=result.tool_name,
-        tool_success=True,
+        tool_name=None,
+        tool_success=None,
     )
