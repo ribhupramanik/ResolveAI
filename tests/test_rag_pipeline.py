@@ -424,9 +424,7 @@ def test_cancellation_eligibility_not_found_is_failed_tool():
 
 def test_pipeline_preserves_tool_data():
     tool_result = ToolResult(
-        tool_name=(
-            "check_cancellation_eligibility"
-        ),
+        tool_name=("check_cancellation_eligibility"),
         success=True,
         data={
             "found": True,
@@ -434,8 +432,7 @@ def test_pipeline_preserves_tool_data():
             "status": "processing",
             "eligible": True,
             "reason": (
-                "The order is still processing "
-                "and is eligible for cancellation."
+                "The order is still processing and is eligible for cancellation."
             ),
             "requires_confirmation": True,
             "action_performed": False,
@@ -453,53 +450,95 @@ def test_pipeline_preserves_tool_data():
         tool_result=tool_result,
     )
 
-    result = pipeline.run(
-        "Can I cancel ORD-10002?"
-    )
+    result = pipeline.run("Can I cancel ORD-10002?")
 
     assert result.tool_used is True
 
-    assert (
-        result.tool_name
-        == "check_cancellation_eligibility"
-    )
+    assert result.tool_name == "check_cancellation_eligibility"
 
     assert result.tool_success is True
 
     assert result.tool_data is not None
 
-    assert (
-        result.tool_data["order_number"]
-        == "ORD-10002"
-    )
+    assert result.tool_data["order_number"] == "ORD-10002"
 
     assert result.tool_data["eligible"] is True
 
-    assert (
-        result.tool_data["requires_confirmation"]
-        is True
-    )
+    assert result.tool_data["requires_confirmation"] is True
 
-    assert (
-        result.tool_data["action_performed"]
-        is False
-    )
+    assert result.tool_data["action_performed"] is False
+
 
 def test_pipeline_without_tool_has_no_tool_data():
     pipeline = create_pipeline(
-        [
-            (
-                "I don't have enough verified "
-                "information to confirm that."
-            )
-        ]
+        [("I don't have enough verified information to confirm that.")]
     )
 
-    result = pipeline.run(
-        "What is your refund policy?"
-    )
+    result = pipeline.run("What is your refund policy?")
 
     assert result.tool_used is False
     assert result.tool_name is None
     assert result.tool_success is None
     assert result.tool_data is None
+
+
+def test_refund_status_reaches_pipeline():
+    tool_result = ToolResult(
+        tool_name="get_refund_status",
+        success=True,
+        data={
+            "order_found": True,
+            "refund_found": True,
+            "order_number": "ORD-10003",
+            "refund_number": "REF-10003",
+            "status": "processing",
+            "amount": "3899.00",
+            "currency": "INR",
+            "initiated_at": ("2026-10-01T10:30:00+00:00"),
+            "completed_at": None,
+            "failure_reason": None,
+        },
+    )
+
+    prompt_builder = FakePromptBuilder()
+
+    pipeline = create_pipeline(
+        responses=[("I've checked the refund status. The refund is processing.")],
+        tool_result=tool_result,
+        prompt_builder=prompt_builder,
+    )
+
+    result = pipeline.run("Where is my refund for ORD-10003?")
+
+    assert result.tool_used is True
+    assert result.tool_name == "get_refund_status"
+    assert result.tool_success is True
+
+    assert result.tool_data is not None
+
+    assert result.tool_data["order_number"] == "ORD-10003"
+
+    assert result.tool_data["refund_number"] == "REF-10003"
+
+    assert result.tool_data["status"] == "processing"
+
+    assert result.tool_data["amount"] == "3899.00"
+
+    assert prompt_builder.last_operational_context is not None
+
+    operational_context = prompt_builder.last_operational_context
+
+    assert operational_context.tool_used is True
+
+    assert operational_context.tool_name == "get_refund_status"
+
+    assert operational_context.tool_success is True
+
+    assert "REF-10003" in operational_context.context
+
+    assert "3899.00" in operational_context.context
+
+    assert "processing" in operational_context.context
+
+    assert result.used_fallback is False
+
