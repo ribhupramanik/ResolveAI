@@ -810,3 +810,100 @@ def test_grounded_cancellation_eligibility_response_is_allowed(
     )
 
     assert result.is_valid
+
+
+def test_successful_refund_check_allows_checked_claim(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    operational_context = OperationalContext(
+        context=(
+            "Tool: get_refund_status\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- order_found: True\n"
+            "- refund_found: True\n"
+            "- order_number: ORD-10003\n"
+            "- refund_number: REF-10003\n"
+            "- status: processing\n"
+            "- amount: 1299.00\n"
+            "- currency: INR"
+        ),
+        tool_used=True,
+        tool_name="get_refund_status",
+        tool_success=True,
+    )
+
+    result = validator.validate(
+        response_text=("I've checked the refund status. The refund is processing."),
+        query=("Where is my refund for ORD-10003?"),
+        verified_knowledge=(verified_knowledge),
+        system_capabilities=(system_capabilities),
+        operational_context=(operational_context),
+    )
+
+    assert result.is_valid
+
+
+def test_failed_refund_check_rejects_checked_claim(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    operational_context = OperationalContext(
+        context=(
+            "Tool: get_refund_status\n"
+            "Tool status: failed\n"
+            "Data: "
+            "{'order_number': 'ORD-99999'}\n"
+            "Error: Order not found."
+        ),
+        tool_used=True,
+        tool_name="get_refund_status",
+        tool_success=False,
+    )
+
+    result = validator.validate(
+        response_text=("I've checked the refund status."),
+        query=("Where is my refund for ORD-99999?"),
+        verified_knowledge=(verified_knowledge),
+        system_capabilities=(system_capabilities),
+        operational_context=(operational_context),
+    )
+
+    assert not result.is_valid
+
+    assert any(issue.code == "unsupported_action_claim" for issue in result.issues)
+
+
+def test_refund_amount_from_operational_data_is_allowed(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    operational_context = OperationalContext(
+        context=(
+            "Tool: get_refund_status\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- order_number: ORD-10003\n"
+            "- refund_found: True\n"
+            "- status: processing\n"
+            "- amount: 1299.00\n"
+            "- currency: INR"
+        ),
+        tool_used=True,
+        tool_name="get_refund_status",
+        tool_success=True,
+    )
+
+    result = validator.validate(
+        response_text=("The refund amount is ₹1299.00 and its status is processing."),
+        query=("What is the refund status for ORD-10003?"),
+        verified_knowledge=(verified_knowledge),
+        system_capabilities=(system_capabilities),
+        operational_context=(operational_context),
+    )
+
+    assert result.is_valid

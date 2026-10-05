@@ -666,6 +666,7 @@ class ResponseValidator:
                     in {
                         "get_order",
                         "check_cancellation_eligibility",
+                        "get_refund_status",
                     }
                 )
 
