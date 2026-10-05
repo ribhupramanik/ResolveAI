@@ -12,6 +12,9 @@ from src.tools.cancellation_eligibility_tool import (
 from src.tools.order_lookup_tool import (
     OrderLookupTool,
 )
+from src.tools.refund_status_tool import (
+    RefundStatusTool,
+)
 
 ORDER_NUMBER_PATTERN = re.compile(
     r"\bORD-\d+\b",
@@ -50,6 +53,11 @@ CANCELLATION_REQUEST_PATTERNS = [
     ),
 ]
 
+REFUND_REQUEST_PATTERN = re.compile(
+    r"\brefund(?:s|ed|ing)?\b",
+    re.IGNORECASE,
+)
+
 
 def extract_order_number(
     query: str,
@@ -82,11 +90,19 @@ def is_cancellation_request(
     return any(pattern.search(query) for pattern in CANCELLATION_REQUEST_PATTERNS)
 
 
+def is_refund_request(
+    query: str,
+) -> bool:
+
+    return REFUND_REQUEST_PATTERN.search(query) is not None
+
+
 class ToolRouter:
     def __init__(
         self,
         order_lookup_tool: OrderLookupTool | None = None,
-        cancellation_eligibility_tool: CancellationEligibilityTool | None = None,
+        cancellation_eligibility_tool: (CancellationEligibilityTool | None) = None,
+        refund_status_tool: RefundStatusTool | None = None,
     ):
         self.order_lookup_tool = (
             order_lookup_tool if order_lookup_tool is not None else OrderLookupTool()
@@ -96,6 +112,10 @@ class ToolRouter:
             cancellation_eligibility_tool
             if cancellation_eligibility_tool is not None
             else CancellationEligibilityTool()
+        )
+
+        self.refund_status_tool = (
+            refund_status_tool if refund_status_tool is not None else RefundStatusTool()
         )
 
     def run(
@@ -111,6 +131,9 @@ class ToolRouter:
 
         if order_number is None:
             return None
+
+        if is_refund_request(query):
+            return self.refund_status_tool.execute(order_number)
 
         if is_cancellation_request(query):
             return self.cancellation_eligibility_tool.execute(order_number)

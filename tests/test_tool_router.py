@@ -49,24 +49,65 @@ class FakeCancellationEligibilityTool:
         )
 
 
+class FakeRefundStatusTool:
+    name = "get_refund_status"
+
+    def __init__(self):
+        self.calls = []
+
+    def execute(
+        self,
+        order_number: str,
+    ) -> ToolResult:
+        self.calls.append(order_number)
+
+        return ToolResult(
+            tool_name=self.name,
+            success=True,
+            data={
+                "order_number": order_number,
+                "order_found": True,
+                "refund_found": True,
+                "status": "processing",
+            },
+        )
+
+
 def create_router():
     order_lookup = FakeOrderLookupTool()
 
-    cancellation = (
-        FakeCancellationEligibilityTool()
-    )
+    cancellation = FakeCancellationEligibilityTool()
 
     router = ToolRouter(
         order_lookup_tool=order_lookup,
-        cancellation_eligibility_tool=(
-            cancellation
-        ),
+        cancellation_eligibility_tool=(cancellation),
     )
 
     return (
         router,
         order_lookup,
         cancellation,
+    )
+
+
+def create_router_with_refund():
+    order_lookup = FakeOrderLookupTool()
+
+    cancellation = FakeCancellationEligibilityTool()
+
+    refund = FakeRefundStatusTool()
+
+    router = ToolRouter(
+        order_lookup_tool=order_lookup,
+        cancellation_eligibility_tool=(cancellation),
+        refund_status_tool=refund,
+    )
+
+    return (
+        router,
+        order_lookup,
+        cancellation,
+        refund,
     )
 
 
@@ -77,16 +118,12 @@ def test_tracking_question_uses_order_lookup():
         cancellation,
     ) = create_router()
 
-    result = router.run(
-        "Where is order ORD-10001?"
-    )
+    result = router.run("Where is order ORD-10001?")
 
     assert result is not None
     assert result.tool_name == "get_order"
 
-    assert order_lookup.calls == [
-        "ORD-10001"
-    ]
+    assert order_lookup.calls == ["ORD-10001"]
 
     assert cancellation.calls == []
 
@@ -98,20 +135,13 @@ def test_cancellation_question_uses_eligibility_tool():
         cancellation,
     ) = create_router()
 
-    result = router.run(
-        "Can I cancel ORD-10002?"
-    )
+    result = router.run("Can I cancel ORD-10002?")
 
     assert result is not None
 
-    assert (
-        result.tool_name
-        == "check_cancellation_eligibility"
-    )
+    assert result.tool_name == "check_cancellation_eligibility"
 
-    assert cancellation.calls == [
-        "ORD-10002"
-    ]
+    assert cancellation.calls == ["ORD-10002"]
 
     assert order_lookup.calls == []
 
@@ -123,20 +153,13 @@ def test_cancel_order_wording_uses_eligibility_tool():
         cancellation,
     ) = create_router()
 
-    result = router.run(
-        "Cancel my order ORD-10002"
-    )
+    result = router.run("Cancel my order ORD-10002")
 
     assert result is not None
 
-    assert (
-        result.tool_name
-        == "check_cancellation_eligibility"
-    )
+    assert result.tool_name == "check_cancellation_eligibility"
 
-    assert cancellation.calls == [
-        "ORD-10002"
-    ]
+    assert cancellation.calls == ["ORD-10002"]
 
     assert order_lookup.calls == []
 
@@ -151,15 +174,11 @@ def test_cancellation_followup_uses_order_from_history():
     history = [
         ConversationTurn(
             role="user",
-            content=(
-                "Where is order ORD-10002?"
-            ),
+            content=("Where is order ORD-10002?"),
         ),
         ConversationTurn(
             role="assistant",
-            content=(
-                "Your order is processing."
-            ),
+            content=("Your order is processing."),
         ),
     ]
 
@@ -170,14 +189,9 @@ def test_cancellation_followup_uses_order_from_history():
 
     assert result is not None
 
-    assert (
-        result.tool_name
-        == "check_cancellation_eligibility"
-    )
+    assert result.tool_name == "check_cancellation_eligibility"
 
-    assert cancellation.calls == [
-        "ORD-10002"
-    ]
+    assert cancellation.calls == ["ORD-10002"]
 
     assert order_lookup.calls == []
 
@@ -189,16 +203,12 @@ def test_order_number_is_normalized():
         cancellation,
     ) = create_router()
 
-    result = router.run(
-        "Where is ord-10001?"
-    )
+    result = router.run("Where is ord-10001?")
 
     assert result is not None
     assert result.tool_name == "get_order"
 
-    assert order_lookup.calls == [
-        "ORD-10001"
-    ]
+    assert order_lookup.calls == ["ORD-10001"]
 
     assert cancellation.calls == []
 
@@ -210,11 +220,103 @@ def test_query_without_order_number_uses_no_tool():
         cancellation,
     ) = create_router()
 
-    result = router.run(
-        "How can I reset my password?"
-    )
+    result = router.run("How can I reset my password?")
 
     assert result is None
 
     assert order_lookup.calls == []
     assert cancellation.calls == []
+
+
+def test_refund_question_uses_refund_status_tool():
+    (
+        router,
+        order_lookup,
+        cancellation,
+        refund,
+    ) = create_router_with_refund()
+
+    result = router.run("Where is my refund for ORD-10003?")
+
+    assert result is not None
+
+    assert result.tool_name == "get_refund_status"
+
+    assert refund.calls == ["ORD-10003"]
+
+    assert order_lookup.calls == []
+    assert cancellation.calls == []
+
+
+def test_refund_followup_uses_order_from_history():
+    (
+        router,
+        order_lookup,
+        cancellation,
+        refund,
+    ) = create_router_with_refund()
+
+    history = [
+        ConversationTurn(
+            role="user",
+            content=("I was asking about ORD-10003."),
+        ),
+        ConversationTurn(
+            role="assistant",
+            content=("How can I help with that order?"),
+        ),
+    ]
+
+    result = router.run(
+        "Has my refund arrived?",
+        conversation_history=history,
+    )
+
+    assert result is not None
+
+    assert result.tool_name == "get_refund_status"
+
+    assert refund.calls == ["ORD-10003"]
+
+    assert order_lookup.calls == []
+    assert cancellation.calls == []
+
+
+def test_refund_order_number_is_normalized():
+    (
+        router,
+        order_lookup,
+        cancellation,
+        refund,
+    ) = create_router_with_refund()
+
+    result = router.run("What is the refund status for ord-10003?")
+
+    assert result is not None
+
+    assert result.tool_name == "get_refund_status"
+
+    assert refund.calls == ["ORD-10003"]
+
+    assert order_lookup.calls == []
+    assert cancellation.calls == []
+
+
+def test_refund_about_cancelled_order_uses_refund_tool():
+    (
+        router,
+        order_lookup,
+        cancellation,
+        refund,
+    ) = create_router_with_refund()
+
+    result = router.run("What is the refund status for cancelled order ORD-10002?")
+
+    assert result is not None
+
+    assert result.tool_name == "get_refund_status"
+
+    assert refund.calls == ["ORD-10002"]
+
+    assert cancellation.calls == []
+    assert order_lookup.calls == []
