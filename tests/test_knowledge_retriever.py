@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -151,3 +152,28 @@ def test_high_threshold_can_return_empty(
     )
 
     assert matches == []
+
+
+def test_production_refund_status_knowledge_matches_registered_lookup():
+    knowledge_path = (
+        Path(__file__).resolve().parents[1]
+        / "data"
+        / "knowledge"
+        / "knowledge_base.json"
+    )
+
+    data = json.loads(knowledge_path.read_text(encoding="utf-8"))
+
+    refund_status = next(item for item in data if item["topic"] == "refund_status")
+
+    content = refund_status["content"]
+
+    assert "No live refund-status integration" not in content
+
+    assert "get_refund_status" in content
+    assert "read-only" in content
+
+    assert (
+        "does not provide or imply a general "
+        "refund processing or arrival timeline" in content
+    )

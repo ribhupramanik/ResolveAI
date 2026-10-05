@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -139,3 +140,36 @@ def test_duplicate_capability_raises_error(
 
     with pytest.raises(ValueError):
         SystemCapabilitiesProvider(path)
+
+
+def test_production_capabilities_include_refund_status_lookup():
+    capabilities_path = (
+        Path(__file__).resolve().parents[1]
+        / "data"
+        / "knowledge"
+        / "system_capabilities.json"
+    )
+
+    data = json.loads(capabilities_path.read_text(encoding="utf-8"))
+
+    refund_lookup = next(
+        item for item in data if item["capability"] == "refund_status_lookup"
+    )
+
+    assert refund_lookup["available"] is True
+
+    assert "get_refund_status" in refund_lookup["content"]
+
+    assert "read-only" in refund_lookup["content"]
+
+    live_access = next(
+        item for item in data if item["capability"] == "live_operational_data_access"
+    )
+
+    external_actions = next(
+        item for item in data if item["capability"] == "external_action_execution"
+    )
+
+    assert live_access["available"] is False
+
+    assert external_actions["available"] is False
