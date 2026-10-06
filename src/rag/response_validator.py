@@ -657,17 +657,32 @@ class ResponseValidator:
 
                 normalized = matched_text.lower().strip()
 
-                read_only_check_is_supported = (
-                    "checked" in normalized
-                    and operational_context is not None
+                read_only_tool_names = {
+                    "get_order",
+                    "check_cancellation_eligibility",
+                    "get_refund_status",
+                }
+
+                single_read_only_check_succeeded = (
+                    operational_context is not None
                     and operational_context.tool_used
                     and operational_context.tool_success
-                    and operational_context.tool_name
-                    in {
-                        "get_order",
-                        "check_cancellation_eligibility",
-                        "get_refund_status",
-                    }
+                    and operational_context.tool_name in read_only_tool_names
+                )
+
+                multi_read_only_checks_succeeded = (
+                    operational_context is not None
+                    and operational_context.tool_used
+                    and bool(operational_context.tool_results)
+                    and all(
+                        tool_result.success
+                        and tool_result.tool_name in read_only_tool_names
+                        for tool_result in operational_context.tool_results
+                    )
+                )
+
+                read_only_check_is_supported = "checked" in normalized and (
+                    single_read_only_check_succeeded or multi_read_only_checks_succeeded
                 )
 
                 if read_only_check_is_supported:
