@@ -768,8 +768,20 @@ class ResponseValidator:
             system_capabilities.context,
         ]
 
-        if operational_context is not None and operational_context.tool_success:
-            evidence_parts.append(operational_context.context)
+        if operational_context is not None:
+            if operational_context.tool_results:
+                for tool_result in operational_context.tool_results:
+                    if not tool_result.success:
+                        continue
+
+                    for key, value in tool_result.data.items():
+                        if value is None:
+                            continue
+
+                        evidence_parts.append(f"{key}: {value}")
+
+            elif operational_context.tool_success:
+                evidence_parts.append(operational_context.context)
 
         evidence = " ".join(evidence_parts)
 
