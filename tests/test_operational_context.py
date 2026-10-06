@@ -33,6 +33,8 @@ def test_multiple_tool_results_build_combined_context():
     assert context.tool_name is None
     assert context.tool_success is None
 
+    assert context.tool_results == tuple(results)
+
     assert "Tool: get_order" in context.context
     assert "status: delivered" in context.context
 
@@ -63,6 +65,8 @@ def test_single_success_preserves_legacy_metadata():
     assert context.tool_name == "get_order"
     assert context.tool_success is True
 
+    assert context.tool_results == (result,)
+
     assert "Tool: get_order" in context.context
     assert "Tool status: success" in context.context
     assert "order_number: ORD-10001" in context.context
@@ -87,7 +91,20 @@ def test_single_failure_preserves_legacy_metadata():
     assert context.tool_name == "get_refund_status"
     assert context.tool_success is False
 
+    
+    assert context.tool_results == (result,)
+
     assert "Tool: get_refund_status" in context.context
     assert "Tool status: failed" in context.context
     assert "ORD-99999" in context.context
     assert "Error: Order not found." in context.context
+
+
+def test_no_tool_has_empty_tool_results():
+    context = build_operational_context(None)
+
+    assert context.tool_used is False
+    assert context.tool_name is None
+    assert context.tool_success is None
+
+    assert context.tool_results == ()

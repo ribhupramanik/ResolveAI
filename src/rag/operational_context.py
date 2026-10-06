@@ -10,6 +10,8 @@ class OperationalContext:
     tool_name: str | None
     tool_success: bool | None
 
+    tool_results: tuple[ToolResult, ...] = ()
+
 
 def build_operational_context(
     result: ToolResult | list[ToolResult] | None,
@@ -21,6 +23,7 @@ def build_operational_context(
             tool_used=False,
             tool_name=None,
             tool_success=None,
+            tool_results=(),
         )
 
     if isinstance(result, ToolResult):
@@ -50,6 +53,8 @@ def build_operational_context(
             "Authoritative operational data:\n" + "\n".join(data_lines)
         )
 
+    tool_results = tuple(results)
+
     if len(results) == 1:
         only_result = results[0]
 
@@ -58,6 +63,7 @@ def build_operational_context(
             tool_used=True,
             tool_name=only_result.tool_name,
             tool_success=only_result.success,
+            tool_results=tool_results,
         )
 
     return OperationalContext(
@@ -65,4 +71,5 @@ def build_operational_context(
         tool_used=True,
         tool_name=None,
         tool_success=None,
+        tool_results=tool_results,
     )
