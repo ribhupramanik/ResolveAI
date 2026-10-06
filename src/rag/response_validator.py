@@ -628,12 +628,29 @@ class ResponseValidator:
         seen_matches = set()
 
         for match in self.LOOKED_UP_PATTERN.finditer(response_text):
-            lookup_was_successful = (
+            single_lookup_succeeded = (
                 operational_context is not None
                 and operational_context.tool_used
                 and operational_context.tool_name == "get_order"
                 and operational_context.tool_success
             )
+
+            multi_lookup_succeeded = (
+                operational_context is not None
+                and operational_context.tool_used
+                and len(operational_context.tool_results) > 1
+                and all(
+                    tool_result.success
+                    and tool_result.tool_name
+                    in {
+                        "get_order",
+                        "get_refund_status",
+                    }
+                    for tool_result in operational_context.tool_results
+                )
+            )
+
+            lookup_was_successful = single_lookup_succeeded or multi_lookup_succeeded
 
             if lookup_was_successful:
                 continue

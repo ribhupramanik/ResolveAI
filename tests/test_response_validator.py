@@ -1149,3 +1149,122 @@ def test_failed_tool_in_multi_tool_run_rejects_checked_claim(
     assert not result.is_valid
 
     assert any(issue.code == "unsupported_action_claim" for issue in result.issues)
+
+
+def test_successful_multi_tool_lookup_allows_looked_up_claim(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    tool_results = (
+        ToolResult(
+            tool_name="get_order",
+            success=True,
+            data={
+                "order_number": "ORD-10003",
+                "status": "delivered",
+            },
+        ),
+        ToolResult(
+            tool_name="get_refund_status",
+            success=True,
+            data={
+                "order_number": "ORD-10003",
+                "refund_found": True,
+                "status": "processing",
+            },
+        ),
+    )
+
+    operational_context = OperationalContext(
+        context=(
+            "Tool: get_order\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- order_number: ORD-10003\n"
+            "- status: delivered\n"
+            "\n"
+            "Tool: get_refund_status\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- order_number: ORD-10003\n"
+            "- refund_found: True\n"
+            "- status: processing"
+        ),
+        tool_used=True,
+        tool_name=None,
+        tool_success=None,
+        tool_results=tool_results,
+    )
+
+    result = validator.validate(
+        response_text=(
+            "I've looked up the order and refund status. "
+            "The order is delivered and the refund "
+            "is processing."
+        ),
+        query=("What is the order status and refund status for ORD-10003?"),
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+        operational_context=operational_context,
+    )
+
+    assert result.is_valid
+
+
+def test_failed_lookup_in_multi_tool_run_rejects_looked_up_claim(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    tool_results = (
+        ToolResult(
+            tool_name="get_order",
+            success=True,
+            data={
+                "order_number": "ORD-10003",
+                "status": "delivered",
+            },
+        ),
+        ToolResult(
+            tool_name="get_refund_status",
+            success=False,
+            data={
+                "order_number": "ORD-10003",
+            },
+            error="Refund lookup failed.",
+        ),
+    )
+
+    operational_context = OperationalContext(
+        context=(
+            "Tool: get_order\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- order_number: ORD-10003\n"
+            "- status: delivered\n"
+            "\n"
+            "Tool: get_refund_status\n"
+            "Tool status: failed\n"
+            "Data: {'order_number': 'ORD-10003'}\n"
+            "Error: Refund lookup failed."
+        ),
+        tool_used=True,
+        tool_name=None,
+        tool_success=None,
+        tool_results=tool_results,
+    )
+
+    result = validator.validate(
+        response_text=(
+            "I've looked up the order and refund status. The order is delivered."
+        ),
+        query=("What is the order status and refund status for ORD-10003?"),
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+        operational_context=operational_context,
+    )
+
+    assert not result.is_valid
+
+    assert any(issue.code == "unsupported_action_claim" for issue in result.issues)
