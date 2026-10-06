@@ -542,3 +542,54 @@ def test_refund_status_reaches_pipeline():
 
     assert result.used_fallback is False
 
+
+def test_multiple_tool_results_reach_pipeline():
+    tool_results = [
+        ToolResult(
+            tool_name="get_order",
+            success=True,
+            data={
+                "order_number": "ORD-10003",
+                "status": "delivered",
+            },
+        ),
+        ToolResult(
+            tool_name="get_refund_status",
+            success=True,
+            data={
+                "order_number": "ORD-10003",
+                "refund_found": True,
+                "refund_number": "REF-10003",
+                "status": "processing",
+            },
+        ),
+    ]
+
+    prompt_builder = FakePromptBuilder()
+
+    pipeline = create_pipeline(
+        responses=["ORD-10003 is the order number."],
+        tool_result=tool_results,
+        prompt_builder=prompt_builder,
+    )
+
+    result = pipeline.run("What is the order status and refund status for ORD-10003?")
+
+    assert result.tool_used is True
+
+    # There is no single tool in a multi-tool run.
+    assert result.tool_name is None
+    assert result.tool_success is None
+    assert result.tool_data is None
+
+    assert result.tool_results == tuple(tool_results)
+
+    operational_context = prompt_builder.last_operational_context
+
+    assert operational_context is not None
+
+    assert operational_context.tool_results == tuple(tool_results)
+
+    assert "Tool: get_order" in operational_context.context
+
+    assert "Tool: get_refund_status" in operational_context.context

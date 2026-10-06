@@ -11,6 +11,7 @@ from src.rag.operational_context import (
 from src.rag.prompt_builder import PromptBuilder, PromptPayload
 from src.rag.response_validator import ResponseValidator, ValidationIssue
 from src.rag.system_capabilities import SystemCapabilitiesProvider
+from src.tools.base import ToolResult
 from src.tools.router import ToolRouter
 
 SAFE_FALLBACK = (
@@ -43,6 +44,7 @@ class RAGResult:
     used_fallback: bool
 
     validation_issues: list[ValidationIssue]
+    tool_results: tuple[ToolResult, ...] = ()
 
 
 class ResolveAIPipeline:
@@ -101,7 +103,19 @@ class ResolveAIPipeline:
             history,
         )
 
-        tool_data = dict(tool_result.data) if tool_result is not None else None
+        if tool_result is None:
+            tool_results = ()
+
+        elif isinstance(tool_result, list):
+            tool_results = tuple(tool_result)
+
+        else:
+            tool_results = (tool_result,)
+
+        if len(tool_results) == 1:
+            tool_data = dict(tool_results[0].data)
+        else:
+            tool_data = None
 
         operational_context = build_operational_context(tool_result)
 
@@ -158,6 +172,7 @@ class ResolveAIPipeline:
                 attempts=1,
                 used_fallback=False,
                 validation_issues=[],
+                tool_results=tool_results,
             )
 
         # Retry using validator feedback.
@@ -191,6 +206,7 @@ class ResolveAIPipeline:
                 attempts=2,
                 used_fallback=False,
                 validation_issues=(first_validation.issues),
+                tool_results=tool_results,
             )
 
         # Both generation failed validation.
@@ -213,6 +229,7 @@ class ResolveAIPipeline:
             attempts=2,
             used_fallback=True,
             validation_issues=all_issues,
+            tool_results=tool_results,
         )
 
     @staticmethod

@@ -13,6 +13,8 @@ from src.rag.system_capabilities import (
     SystemCapabilitiesContext,
 )
 
+from src.tools.base import ToolResult
+
 
 @pytest.fixture
 def validator():
@@ -904,6 +906,75 @@ def test_refund_amount_from_operational_data_is_allowed(
         verified_knowledge=(verified_knowledge),
         system_capabilities=(system_capabilities),
         operational_context=(operational_context),
+    )
+
+    assert result.is_valid
+
+
+def test_numeric_claim_from_successful_multi_tool_data_is_allowed(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    tool_results = (
+        ToolResult(
+            tool_name="get_order",
+            success=True,
+            data={
+                "order_number": "ORD-10003",
+                "status": "delivered",
+            },
+        ),
+        ToolResult(
+            tool_name="get_refund_status",
+            success=True,
+            data={
+                "order_number": "ORD-10003",
+                "refund_found": True,
+                "refund_number": "REF-10003",
+                "status": "processing",
+                "amount": "3899.00",
+                "currency": "INR",
+            },
+        ),
+    )
+
+    operational_context = OperationalContext(
+        context=(
+            "Tool: get_order\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- order_number: ORD-10003\n"
+            "- status: delivered\n"
+            "\n"
+            "Tool: get_refund_status\n"
+            "Tool status: success\n"
+            "Authoritative operational data:\n"
+            "- order_number: ORD-10003\n"
+            "- refund_found: True\n"
+            "- refund_number: REF-10003\n"
+            "- status: processing\n"
+            "- amount: 3899.00\n"
+            "- currency: INR"
+        ),
+        tool_used=True,
+        tool_name=None,
+        tool_success=None,
+        tool_results=tool_results,
+    )
+
+    result = validator.validate(
+        response_text=(
+            "ORD-10003 is delivered and its "
+            "₹3899.00 refund is processing."
+        ),
+        query=(
+            "What is the order status and "
+            "refund status for ORD-10003?"
+        ),
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+        operational_context=operational_context,
     )
 
     assert result.is_valid
