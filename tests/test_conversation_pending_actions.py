@@ -23,6 +23,7 @@ from src.rag.pipeline import RAGResult
 from src.services.pending_action_service import (
     PendingActionService,
 )
+from src.tools.base import ToolResult
 
 
 class CountingFakePipeline:
@@ -33,6 +34,7 @@ class CountingFakePipeline:
         tool_name=None,
         tool_success=None,
         tool_data=None,
+        tool_results=(),
         used_fallback=False,
     ):
         self.run_calls = 0
@@ -42,6 +44,7 @@ class CountingFakePipeline:
         self.tool_success = tool_success
         self.tool_data = tool_data
         self.used_fallback = used_fallback
+        self.tool_results = tool_results
 
     def run(
         self,
@@ -66,6 +69,7 @@ class CountingFakePipeline:
             tool_name=self.tool_name,
             tool_success=self.tool_success,
             tool_data=self.tool_data,
+            tool_results=self.tool_results,
         )
 
 
@@ -1534,3 +1538,102 @@ def test_executed_action_cannot_be_rejected(
 
     assert stored_action is not None
     assert stored_action.status == "executed"
+
+
+def test_multi_tool_executions_are_returned_and_persisted(
+    app,
+    client,
+    conversation,
+):
+    tool_results = (
+        ToolResult(
+            tool_name="get_order",
+            success=True,
+            data={
+                "order_number": "ORD-10003",
+                "status": "delivered",
+                "customer_name": "Meera Sen",
+            },
+        ),
+        ToolResult(
+            tool_name="get_refund_status",
+            success=True,
+            data={
+                "order_number": "ORD-10003",
+                "refund_number": "REF-10003",
+                "status": "processing",
+                "amount": "3899.00",
+                "currency": "INR",
+            },
+        ),
+    )
+
+    multi_tool_pipeline = CountingFakePipeline(
+        tool_used=True,
+        tool_name=None,
+        tool_success=None,
+        tool_data=None,
+        tool_results=tool_results,
+    )
+
+    app.dependency_overrides[get_pipeline] = lambda: multi_tool_pipeline
+
+    response = client.post(
+        (f"/api/v1/conversations/{conversation.id}/messages"),
+        json={
+            "message": ("What is the order status and refund status for ORD-10003?"),
+        },
+    )
+
+    assert response.status_code == 201
+
+    data = response.json()
+
+    expected_tool_executions = [
+        {
+            "tool_name": "get_order",
+            "success": True,
+        },
+        {
+            "tool_name": "get_refund_status",
+            "success": True,
+        },
+    ]
+
+    # Public response metadata should contain only
+    # the safe execution summary.
+    assert data["metadata"]["tool_executions"] == expected_tool_executions
+
+    # The same safe metadata must be persisted on
+    # the assistant message.
+    assert (
+        data["assistant_message"]["ai_metadata"]["tool_executions"]
+        == expected_tool_executions
+    )
+
+    # Reload from the API to prove this survives
+    # persistence rather than only existing in the
+    # immediate POST response.
+    messages_response = client.get(f"/api/v1/conversations/{conversation.id}/messages")
+
+    assert messages_response.status_code == 200
+
+    messages = messages_response.json()
+
+    assistant_messages = [
+        message for message in messages if message["role"] == "assistant"
+    ]
+
+    assert len(assistant_messages) == 1
+
+    persisted_metadata = assistant_messages[0]["ai_metadata"]
+
+    assert persisted_metadata["tool_executions"] == expected_tool_executions
+
+    # Raw operational data must not be copied into
+    # the public/persisted tool execution summary.
+    for execution in persisted_metadata["tool_executions"]:
+        assert set(execution) == {
+            "tool_name",
+            "success",
+        }
