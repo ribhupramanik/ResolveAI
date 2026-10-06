@@ -320,3 +320,27 @@ def test_refund_about_cancelled_order_uses_refund_tool():
 
     assert cancellation.calls == []
     assert order_lookup.calls == []
+
+
+def test_order_and_refund_status_request_uses_both_tools():
+    (
+        router,
+        order_lookup,
+        cancellation,
+        refund,
+    ) = create_router_with_refund()
+
+    result = router.run("What is the order status and refund status for ORD-10003?")
+
+    assert isinstance(result, list)
+    assert len(result) == 2
+
+    assert result[0].tool_name == "get_order"
+    assert result[1].tool_name == "get_refund_status"
+
+    assert order_lookup.calls == ["ORD-10003"]
+
+    assert refund.calls == ["ORD-10003"]
+
+    assert cancellation.calls == []
+
