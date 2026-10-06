@@ -15,6 +15,11 @@ class ValidationIssueResponse(BaseModel):
     matched_text: str
 
 
+class ToolExecutionMetadata(BaseModel):
+    tool_name: str
+    success: bool
+
+
 class ChatMetadata(BaseModel):
     retrieved_count: int
 
@@ -27,6 +32,8 @@ class ChatMetadata(BaseModel):
     tool_used: bool
     tool_name: str | None = None
     tool_success: bool | None = None
+
+    tool_executions: list[ToolExecutionMetadata] = Field(default_factory=list)
 
     attempts: int
     used_fallback: bool

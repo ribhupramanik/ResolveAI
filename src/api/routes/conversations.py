@@ -22,6 +22,7 @@ from src.api.schemas.action_execution import (
 )
 from src.api.schemas.chat import (
     ChatMetadata,
+    ToolExecutionMetadata,
     ValidationIssueResponse,
 )
 from src.api.schemas.conversation import (
@@ -703,6 +704,7 @@ def send_message(
                 "tool_used": False,
                 "tool_name": None,
                 "tool_success": None,
+                "tool_executions": [],
                 "attempts": 0,
                 "used_fallback": False,
                 "retry_trigger_issues": [],
@@ -744,6 +746,7 @@ def send_message(
                 tool_used=False,
                 tool_name=None,
                 tool_success=None,
+                tool_executions=[],
                 attempts=0,
                 used_fallback=False,
                 retry_trigger_issues=[],
@@ -782,6 +785,14 @@ def send_message(
             for issue in result.validation_issues
         ]
 
+        tool_executions = [
+            {
+                "tool_name": tool_result.tool_name,
+                "success": tool_result.success,
+            }
+            for tool_result in result.tool_results
+        ]
+
         metadata_data = {
             "retrieved_count": result.retrieved_count,
             "verified_knowledge_count": result.verified_knowledge_count,
@@ -791,6 +802,7 @@ def send_message(
             "tool_used": result.tool_used,
             "tool_name": result.tool_name,
             "tool_success": result.tool_success,
+            "tool_executions": tool_executions,
             "attempts": result.attempts,
             "used_fallback": result.used_fallback,
             "retry_trigger_issues": retry_trigger_issues,
@@ -831,6 +843,13 @@ def send_message(
         tool_used=result.tool_used,
         tool_name=result.tool_name,
         tool_success=result.tool_success,
+        tool_executions=[
+            ToolExecutionMetadata(
+                tool_name=execution["tool_name"],
+                success=execution["success"],
+            )
+            for execution in tool_executions
+        ],
         attempts=result.attempts,
         used_fallback=(result.used_fallback),
         retry_trigger_issues=[
