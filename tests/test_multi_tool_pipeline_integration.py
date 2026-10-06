@@ -74,9 +74,7 @@ class FakeCancellationEligibilityTool:
     ) -> ToolResult:
         self.calls.append(order_number)
 
-        raise AssertionError(
-            "Cancellation tool should not be called."
-        )
+        raise AssertionError("Cancellation tool should not be called.")
 
 
 class FakeContextBuilder:
@@ -129,14 +127,10 @@ class CapturingPromptBuilder:
         conversation_history=None,
         operational_context=None,
     ) -> PromptPayload:
-        self.last_operational_context = (
-            operational_context
-        )
+        self.last_operational_context = operational_context
 
         return PromptPayload(
-            system_prompt=(
-                "Use authoritative operational evidence."
-            ),
+            system_prompt=("Use authoritative operational evidence."),
             user_prompt=query,
         )
 
@@ -166,15 +160,11 @@ def test_order_and_refund_multi_tool_pipeline_integration():
     order_lookup = FakeOrderLookupTool()
     refund_status = FakeRefundStatusTool()
 
-    cancellation = (
-        FakeCancellationEligibilityTool()
-    )
+    cancellation = FakeCancellationEligibilityTool()
 
     router = ToolRouter(
         order_lookup_tool=order_lookup,
-        cancellation_eligibility_tool=(
-            cancellation
-        ),
+        cancellation_eligibility_tool=(cancellation),
         refund_status_tool=refund_status,
     )
 
@@ -184,32 +174,19 @@ def test_order_and_refund_multi_tool_pipeline_integration():
     pipeline = ResolveAIPipeline(
         generator=generator,
         context_builder=FakeContextBuilder(),
-        knowledge_retriever=(
-            FakeKnowledgeRetriever()
-        ),
-        system_capabilities_provider=(
-            FakeSystemCapabilitiesProvider()
-        ),
+        knowledge_retriever=(FakeKnowledgeRetriever()),
+        system_capabilities_provider=(FakeSystemCapabilitiesProvider()),
         prompt_builder=prompt_builder,
         validator=ResponseValidator(),
         tool_router=router,
     )
 
-    result = pipeline.run(
-        (
-            "What is the order status and "
-            "refund status for ORD-10003?"
-        )
-    )
+    result = pipeline.run("What is the order status and refund status for ORD-10003?")
 
     # Both operational tools were actually called.
-    assert order_lookup.calls == [
-        "ORD-10003"
-    ]
+    assert order_lookup.calls == ["ORD-10003"]
 
-    assert refund_status.calls == [
-        "ORD-10003"
-    ]
+    assert refund_status.calls == ["ORD-10003"]
 
     assert cancellation.calls == []
 
@@ -228,57 +205,32 @@ def test_order_and_refund_multi_tool_pipeline_integration():
     # Structured tool evidence is preserved.
     assert len(result.tool_results) == 2
 
-    assert (
-        result.tool_results[0].tool_name
-        == "get_order"
-    )
+    assert result.tool_results[0].tool_name == "get_order"
 
-    assert (
-        result.tool_results[1].tool_name
-        == "get_refund_status"
-    )
+    assert result.tool_results[1].tool_name == "get_refund_status"
 
-    assert all(
-        tool_result.success
-        for tool_result in result.tool_results
-    )
+    assert all(tool_result.success for tool_result in result.tool_results)
 
     # Combined operational evidence reached
     # the prompt layer.
-    operational_context = (
-        prompt_builder.last_operational_context
-    )
+    operational_context = prompt_builder.last_operational_context
 
     assert operational_context is not None
 
-    assert len(
-        operational_context.tool_results
-    ) == 2
+    assert len(operational_context.tool_results) == 2
 
-    assert (
-        "Tool: get_order"
-        in operational_context.context
-    )
+    assert "Tool: get_order" in operational_context.context
 
-    assert (
-        "Tool: get_refund_status"
-        in operational_context.context
-    )
+    assert "Tool: get_refund_status" in operational_context.context
 
-    assert (
-        "amount: 3899.00"
-        in operational_context.context
-    )
+    assert "amount: 3899.00" in operational_context.context
 
     # The real validator accepted the combined,
     # operationally-grounded answer.
     assert result.validation_issues == []
 
-    assert (
-        result.text
-        == (
-            "I've checked the order and refund "
-            "status. ORD-10003 is delivered and "
-            "its ₹3899.00 refund is processing."
-        )
+    assert result.text == (
+        "I've checked the order and refund "
+        "status. ORD-10003 is delivered and "
+        "its ₹3899.00 refund is processing."
     )
