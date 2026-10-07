@@ -7,6 +7,11 @@ from sqlalchemy.orm import Session
 from src.db.models import Order, Refund
 from src.tools.order_lookup import get_order
 
+REFUND_ELIGIBLE_ORDER_STATUSES = {
+    "processing",
+    "delivered",
+}
+
 
 @dataclass(frozen=True)
 class RefundEligibilityResult:
@@ -79,11 +84,7 @@ def check_refund_eligibility(
 
     refund_statuses = db.scalars(refund_status_statement).all()
 
-    normalized_status = (
-        order.status.strip().lower()
-        if order.status
-        else ""
-    )
+    normalized_status = order.status.strip().lower() if order.status else ""
 
     if normalized_status == "shipped":
         return RefundEligibilityResult(
@@ -94,8 +95,7 @@ def check_refund_eligibility(
             eligible=False,
             reason_code="ORDER_SHIPPED",
             reason=(
-                "The order has already shipped and is not eligible "
-                "for a direct refund."
+                "The order has already shipped and is not eligible for a direct refund."
             ),
             requires_confirmation=False,
             action_performed=False,
@@ -112,14 +112,9 @@ def check_refund_eligibility(
         )
     )
 
-    refund_statuses = db.scalars(
-        refund_status_statement
-    ).all()
+    refund_statuses = db.scalars(refund_status_statement).all()
 
-    if (
-        normalized_status == "processing"
-        and not refund_statuses
-    ):
+    if normalized_status in REFUND_ELIGIBLE_ORDER_STATUSES and not refund_statuses:
         return RefundEligibilityResult(
             found=True,
             order_number=order.order_number,
@@ -127,9 +122,7 @@ def check_refund_eligibility(
             payment_status=order.payment_status,
             eligible=True,
             reason_code="ELIGIBLE",
-            reason=(
-                "The order is eligible for a full refund."
-            ),
+            reason=("The order is eligible for a full refund."),
             refund_amount=order.total_amount,
             currency=order.currency,
             requires_confirmation=True,

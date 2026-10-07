@@ -155,3 +155,41 @@ def test_paid_shipped_order_is_not_eligible(
 
     assert result.requires_confirmation is False
     assert result.action_performed is False
+
+
+def test_paid_delivered_order_without_refund_is_eligible(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        module,
+        "get_order",
+        lambda db, order_number: OrderLookupResult(
+            found=True,
+            order_number="ORD-10005",
+            status="delivered",
+            payment_status="paid",
+            total_amount=Decimal("3899.00"),
+            currency="INR",
+        ),
+    )
+
+    result = module.check_refund_eligibility(
+        FakeRefundSession(),
+        "ORD-10005",
+    )
+
+    assert result.found is True
+    assert result.order_number == "ORD-10005"
+
+    assert result.status == "delivered"
+    assert result.payment_status == "paid"
+
+    assert result.eligible is True
+    assert result.reason_code == "ELIGIBLE"
+    assert result.reason == ("The order is eligible for a full refund.")
+
+    assert result.refund_amount == Decimal("3899.00")
+    assert result.currency == "INR"
+
+    assert result.requires_confirmation is True
+    assert result.action_performed is False
