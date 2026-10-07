@@ -40,4 +40,21 @@ def check_refund_eligibility(
             action_performed=False,
         )
 
-    raise NotImplementedError("Refund eligibility rules are not implemented yet.")
+    normalized_payment_status = (
+        order.payment_status.strip().lower() if order.payment_status else ""
+    )
+
+    if normalized_payment_status != "paid":
+        return RefundEligibilityResult(
+            found=True,
+            order_number=order.order_number,
+            eligible=False,
+            reason_code="ORDER_NOT_PAID",
+            reason="The order has not been paid.",
+            requires_confirmation=False,
+            action_performed=False,
+        )
+
+    raise NotImplementedError(
+        "Remaining refund eligibility rules are not implemented yet."
+    )
