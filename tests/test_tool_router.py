@@ -456,3 +456,53 @@ def test_refund_action_followup_uses_order_from_history():
     assert refund_status.calls == []
     assert order_lookup.calls == []
     assert cancellation.calls == []
+
+
+def test_refund_status_request_does_not_use_refund_eligibility_tool():
+    (
+        router,
+        order_lookup,
+        cancellation,
+        refund_status,
+    ) = create_router_with_refund()
+
+    refund_eligibility = FakeRefundEligibilityTool()
+    router.refund_eligibility_tool = refund_eligibility
+
+    result = router.run("What is the refund status for ORD-10003?")
+
+    assert result is not None
+
+    assert result.tool_name == "get_refund_status"
+
+    assert refund_status.calls == ["ORD-10003"]
+
+    assert refund_eligibility.calls == []
+    assert order_lookup.calls == []
+    assert cancellation.calls == []
+
+
+def test_router_accepts_refund_eligibility_tool():
+    order_lookup = FakeOrderLookupTool()
+    cancellation = FakeCancellationEligibilityTool()
+    refund_status = FakeRefundStatusTool()
+    refund_eligibility = FakeRefundEligibilityTool()
+
+    router = ToolRouter(
+        order_lookup_tool=order_lookup,
+        cancellation_eligibility_tool=cancellation,
+        refund_status_tool=refund_status,
+        refund_eligibility_tool=refund_eligibility,
+    )
+
+    result = router.run("Refund ORD-10002")
+
+    assert result is not None
+
+    assert result.tool_name == ("check_refund_eligibility")
+
+    assert refund_eligibility.calls == ["ORD-10002"]
+
+    assert refund_status.calls == []
+    assert order_lookup.calls == []
+    assert cancellation.calls == []
