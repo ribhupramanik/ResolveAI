@@ -468,3 +468,41 @@ def test_unknown_refund_status_is_not_eligible(
 
     assert result.requires_confirmation is False
     assert result.action_performed is False
+
+
+def test_unknown_order_status_is_not_eligible(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        module,
+        "get_order",
+        lambda db, order_number: OrderLookupResult(
+            found=True,
+            order_number="ORD-10012",
+            status="on_hold",
+            payment_status="paid",
+            total_amount=Decimal("1799.00"),
+            currency="INR",
+        ),
+    )
+
+    result = module.check_refund_eligibility(
+        RefundStatusSession([]),
+        "ORD-10012",
+    )
+
+    assert result.found is True
+    assert result.order_number == "ORD-10012"
+
+    assert result.eligible is False
+
+    assert result.reason_code == ("ORDER_STATE_UNSUPPORTED")
+    assert result.reason == (
+        "The current order state does not allow a refund to be initiated safely."
+    )
+
+    assert result.refund_amount is None
+    assert result.currency is None
+
+    assert result.requires_confirmation is False
+    assert result.action_performed is False

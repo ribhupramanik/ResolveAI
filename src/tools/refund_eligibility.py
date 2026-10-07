@@ -178,6 +178,16 @@ def check_refund_eligibility(
             action_performed=False,
         )
 
-    raise NotImplementedError(
-        "Remaining refund eligibility rules are not implemented yet."
+    return RefundEligibilityResult(
+        found=True,
+        order_number=order.order_number,
+        status=order.status,
+        payment_status=order.payment_status,
+        eligible=False,
+        reason_code="ORDER_STATE_UNSUPPORTED",
+        reason=(
+            "The current order state does not allow a refund to be initiated safely."
+        ),
+        requires_confirmation=False,
+        action_performed=False,
     )
