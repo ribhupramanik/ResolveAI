@@ -17,6 +17,12 @@ NON_BLOCKING_REFUND_STATUSES = {
     "failed",
 }
 
+KNOWN_REFUND_STATUSES = {
+    "processing",
+    "completed",
+    "failed",
+}
+
 
 @dataclass(frozen=True)
 class RefundEligibilityResult:
@@ -132,6 +138,24 @@ def check_refund_eligibility(
             eligible=False,
             reason_code="REFUND_ALREADY_COMPLETED",
             reason="This order has already been refunded.",
+            requires_confirmation=False,
+            action_performed=False,
+        )
+
+    unsupported_refund_statuses = normalized_refund_statuses - KNOWN_REFUND_STATUSES
+
+    if unsupported_refund_statuses:
+        return RefundEligibilityResult(
+            found=True,
+            order_number=order.order_number,
+            status=order.status,
+            payment_status=order.payment_status,
+            eligible=False,
+            reason_code="REFUND_STATE_UNSUPPORTED",
+            reason=(
+                "The existing refund state does not allow "
+                "a new refund to be initiated safely."
+            ),
             requires_confirmation=False,
             action_performed=False,
         )

@@ -430,3 +430,41 @@ def test_failed_and_completed_refunds_are_blocked(
 
     assert result.requires_confirmation is False
     assert result.action_performed is False
+
+
+def test_unknown_refund_status_is_not_eligible(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        module,
+        "get_order",
+        lambda db, order_number: OrderLookupResult(
+            found=True,
+            order_number="ORD-10011",
+            status="delivered",
+            payment_status="paid",
+            total_amount=Decimal("2999.00"),
+            currency="INR",
+        ),
+    )
+
+    result = module.check_refund_eligibility(
+        RefundStatusSession(["queued"]),
+        "ORD-10011",
+    )
+
+    assert result.found is True
+    assert result.order_number == "ORD-10011"
+
+    assert result.eligible is False
+
+    assert result.reason_code == ("REFUND_STATE_UNSUPPORTED")
+    assert result.reason == (
+        "The existing refund state does not allow a new refund to be initiated safely."
+    )
+
+    assert result.refund_amount is None
+    assert result.currency is None
+
+    assert result.requires_confirmation is False
+    assert result.action_performed is False
