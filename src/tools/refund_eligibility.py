@@ -13,6 +13,10 @@ REFUND_ELIGIBLE_ORDER_STATUSES = {
     "cancelled",
 }
 
+NON_BLOCKING_REFUND_STATUSES = {
+    "failed",
+}
+
 
 @dataclass(frozen=True)
 class RefundEligibilityResult:
@@ -120,19 +124,22 @@ def check_refund_eligibility(
         )
 
     if "completed" in normalized_refund_statuses:
-      return RefundEligibilityResult(
-          found=True,
-          order_number=order.order_number,
-          status=order.status,
-          payment_status=order.payment_status,
-          eligible=False,
-          reason_code="REFUND_ALREADY_COMPLETED",
-          reason="This order has already been refunded.",
-          requires_confirmation=False,
-          action_performed=False,
-      )
+        return RefundEligibilityResult(
+            found=True,
+            order_number=order.order_number,
+            status=order.status,
+            payment_status=order.payment_status,
+            eligible=False,
+            reason_code="REFUND_ALREADY_COMPLETED",
+            reason="This order has already been refunded.",
+            requires_confirmation=False,
+            action_performed=False,
+        )
 
-    if normalized_status in REFUND_ELIGIBLE_ORDER_STATUSES and not refund_statuses:
+    if (
+        normalized_status in REFUND_ELIGIBLE_ORDER_STATUSES
+        and normalized_refund_statuses.issubset(NON_BLOCKING_REFUND_STATUSES)
+    ):
         return RefundEligibilityResult(
             found=True,
             order_number=order.order_number,
