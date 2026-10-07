@@ -73,6 +73,30 @@ class FakeRefundStatusTool:
         )
 
 
+class FakeRefundEligibilityTool:
+    name = "check_refund_eligibility"
+
+    def __init__(self):
+        self.calls = []
+
+    def execute(
+        self,
+        order_number: str,
+    ) -> ToolResult:
+        self.calls.append(order_number)
+
+        return ToolResult(
+            tool_name=self.name,
+            success=True,
+            data={
+                "order_number": order_number,
+                "eligible": True,
+                "requires_confirmation": True,
+                "action_performed": False,
+            },
+        )
+
+
 def create_router():
     order_lookup = FakeOrderLookupTool()
 
@@ -344,3 +368,29 @@ def test_order_and_refund_status_request_uses_both_tools():
 
     assert cancellation.calls == []
 
+
+def test_refund_action_request_uses_refund_eligibility_tool():
+    (
+        router,
+        order_lookup,
+        cancellation,
+        refund_status,
+    ) = create_router_with_refund()
+
+    refund_eligibility = FakeRefundEligibilityTool()
+
+    # Temporary injection for the RED test.
+    # The production constructor does not support this tool yet.
+    router.refund_eligibility_tool = refund_eligibility
+
+    result = router.run("Refund ORD-10002")
+
+    assert result is not None
+
+    assert result.tool_name == ("check_refund_eligibility")
+
+    assert refund_eligibility.calls == ["ORD-10002"]
+
+    assert refund_status.calls == []
+    assert order_lookup.calls == []
+    assert cancellation.calls == []

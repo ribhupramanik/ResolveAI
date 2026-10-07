@@ -63,6 +63,15 @@ ORDER_STATUS_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+REFUND_ACTION_PATTERN = re.compile(
+    r"^\s*refund\s+"
+    r"(?:(?:my|the|this)\s+)?"
+    r"(?:order\s+)?"
+    r"ORD-\d+\b",
+    re.IGNORECASE,
+)
+
+
 def extract_order_number(
     query: str,
     conversation_history: list[ConversationTurn] | None = None,
@@ -100,11 +109,20 @@ def is_refund_request(
 
     return REFUND_REQUEST_PATTERN.search(query) is not None
 
+
+def is_refund_action_request(
+    query: str,
+) -> bool:
+
+    return REFUND_ACTION_PATTERN.search(query) is not None
+
+
 def is_order_status_request(
     query: str,
 ) -> bool:
 
     return ORDER_STATUS_PATTERN.search(query) is not None
+
 
 class ToolRouter:
     def __init__(
@@ -141,20 +159,15 @@ class ToolRouter:
         if order_number is None:
             return None
 
-        if (
-            is_refund_request(query)
-            and is_order_status_request(query)
-        ):
+        if is_refund_request(query) and is_order_status_request(query):
             return [
-                self.order_lookup_tool.execute(
-                    order_number
-                ),
-                self.refund_status_tool.execute(
-                    order_number
-                ),
+                self.order_lookup_tool.execute(order_number),
+                self.refund_status_tool.execute(order_number),
             ]
 
-        
+        if is_refund_action_request(query):
+            return self.refund_eligibility_tool.execute(order_number)
+
         if is_refund_request(query):
             return self.refund_status_tool.execute(order_number)
 
