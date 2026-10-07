@@ -90,10 +90,20 @@ function IntelligencePanel({ metadata }) {
 
 function ToolExecution({ metadata }) {
   /*
-   * Older saved conversations may not contain the
-   * tool observability fields yet.
+   * New responses contain tool_executions.
+   * Older saved conversations may only contain
+   * tool_used / tool_name / tool_success.
    */
-  if (metadata.tool_used === undefined) {
+  const toolExecutions = Array.isArray(
+    metadata.tool_executions,
+  )
+    ? metadata.tool_executions
+    : null;
+
+  if (
+    metadata.tool_used === undefined &&
+    toolExecutions === null
+  ) {
     return (
       <div>
         <p className="mb-2 text-xs uppercase tracking-wider text-slate-500">
@@ -101,7 +111,9 @@ function ToolExecution({ metadata }) {
         </p>
 
         <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
-          <p className="text-sm text-slate-400">Not recorded</p>
+          <p className="text-sm text-slate-400">
+            Not recorded
+          </p>
         </div>
       </div>
     );
@@ -115,17 +127,84 @@ function ToolExecution({ metadata }) {
         </p>
 
         <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
-          <p className="text-sm text-slate-300">No tool required</p>
+          <p className="text-sm text-slate-300">
+            No tool required
+          </p>
 
           <p className="mt-1 text-xs text-slate-500">
-            ResolveAI answered without executing an operational tool.
+            ResolveAI answered without executing an
+            operational tool.
           </p>
         </div>
       </div>
     );
   }
 
-  const succeeded = metadata.tool_success === true;
+  /*
+   * Prefer the new structured execution list.
+   */
+  if (toolExecutions?.length > 0) {
+    return (
+      <div>
+        <p className="mb-2 text-xs uppercase tracking-wider text-slate-500">
+          {toolExecutions.length === 1
+            ? "Tool execution"
+            : "Tool executions"}
+        </p>
+
+        <div className="space-y-2">
+          {toolExecutions.map(
+            (execution, index) => {
+              const succeeded =
+                execution.success === true;
+
+              return (
+                <div
+                  key={`${execution.tool_name}-${index}`}
+                  className={`rounded-lg border p-3 ${
+                    succeeded
+                      ? "border-emerald-900/50 bg-emerald-950/20"
+                      : "border-rose-900/50 bg-rose-950/20"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-slate-500">
+                        Tool
+                      </p>
+
+                      <p className="mt-1 break-words text-sm font-medium text-slate-200">
+                        {execution.tool_name}
+                      </p>
+                    </div>
+
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                        succeeded
+                          ? "bg-emerald-500/10 text-emerald-300"
+                          : "bg-rose-500/10 text-rose-300"
+                      }`}
+                    >
+                      {succeeded
+                        ? "Success"
+                        : "Failed"}
+                    </span>
+                  </div>
+                </div>
+              );
+            },
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  /*
+   * Backward compatibility for conversations saved
+   * before tool_executions was introduced.
+   */
+  const succeeded =
+    metadata.tool_success === true;
 
   return (
     <div>
@@ -142,9 +221,11 @@ function ToolExecution({ metadata }) {
       >
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs text-slate-500">Tool</p>
+            <p className="text-xs text-slate-500">
+              Tool
+            </p>
 
-            <p className="mt-1 text-sm font-medium text-slate-200">
+            <p className="mt-1 break-words text-sm font-medium text-slate-200">
               {metadata.tool_name || "Unknown"}
             </p>
           </div>
@@ -156,7 +237,9 @@ function ToolExecution({ metadata }) {
                 : "bg-rose-500/10 text-rose-300"
             }`}
           >
-            {succeeded ? "Success" : "Failed"}
+            {succeeded
+              ? "Success"
+              : "Failed"}
           </span>
         </div>
       </div>
