@@ -71,6 +71,15 @@ REFUND_ACTION_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+REFUND_ELIGIBILITY_QUESTION_PATTERN = re.compile(
+    r"\bcan\s+i\s+"
+    r"(?:get|receive)\s+"
+    r"(?:a\s+)?refund\s+"
+    r"(?:for\s+)?"
+    r"ORD-\d+\b",
+    re.IGNORECASE,
+)
+
 
 def extract_order_number(
     query: str,
@@ -114,7 +123,10 @@ def is_refund_action_request(
     query: str,
 ) -> bool:
 
-    return REFUND_ACTION_PATTERN.search(query) is not None
+    return (
+        REFUND_ACTION_PATTERN.search(query) is not None
+        or REFUND_ELIGIBILITY_QUESTION_PATTERN.search(query) is not None
+    )
 
 
 def is_order_status_request(
