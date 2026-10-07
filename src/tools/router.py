@@ -74,9 +74,8 @@ REFUND_ACTION_PATTERN = re.compile(
 REFUND_ELIGIBILITY_QUESTION_PATTERN = re.compile(
     r"\bcan\s+i\s+"
     r"(?:get|receive)\s+"
-    r"(?:a\s+)?refund\s+"
-    r"(?:for\s+)?"
-    r"ORD-\d+\b",
+    r"(?:a\s+)?refund\b"
+    r"(?!\s+status\b)",
     re.IGNORECASE,
 )
 
