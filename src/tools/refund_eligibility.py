@@ -10,6 +10,7 @@ from src.tools.order_lookup import get_order
 REFUND_ELIGIBLE_ORDER_STATUSES = {
     "processing",
     "delivered",
+    "cancelled",
 }
 
 
@@ -71,19 +72,6 @@ def check_refund_eligibility(
             action_performed=False,
         )
 
-    refund_status_statement = (
-        select(Refund.status)
-        .join(
-            Order,
-            Refund.order_id == Order.id,
-        )
-        .where(
-            Order.order_number == order.order_number,
-        )
-    )
-
-    refund_statuses = db.scalars(refund_status_statement).all()
-
     normalized_status = order.status.strip().lower() if order.status else ""
 
     if normalized_status == "shipped":
@@ -113,6 +101,23 @@ def check_refund_eligibility(
     )
 
     refund_statuses = db.scalars(refund_status_statement).all()
+
+    normalized_refund_statuses = {
+        status.strip().lower() for status in refund_statuses if status
+    }
+
+    if "processing" in normalized_refund_statuses:
+        return RefundEligibilityResult(
+            found=True,
+            order_number=order.order_number,
+            status=order.status,
+            payment_status=order.payment_status,
+            eligible=False,
+            reason_code="REFUND_ALREADY_PROCESSING",
+            reason=("A refund is already being processed for this order."),
+            requires_confirmation=False,
+            action_performed=False,
+        )
 
     if normalized_status in REFUND_ELIGIBLE_ORDER_STATUSES and not refund_statuses:
         return RefundEligibilityResult(

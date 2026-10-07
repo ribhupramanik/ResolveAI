@@ -193,3 +193,100 @@ def test_paid_delivered_order_without_refund_is_eligible(
 
     assert result.requires_confirmation is True
     assert result.action_performed is False
+
+
+def test_paid_cancelled_order_without_refund_is_eligible(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        module,
+        "get_order",
+        lambda db, order_number: OrderLookupResult(
+            found=True,
+            order_number="ORD-10006",
+            status="cancelled",
+            payment_status="paid",
+            total_amount=Decimal("1999.00"),
+            currency="INR",
+        ),
+    )
+
+    result = module.check_refund_eligibility(
+        FakeRefundSession(),
+        "ORD-10006",
+    )
+
+    assert result.found is True
+    assert result.order_number == "ORD-10006"
+
+    assert result.status == "cancelled"
+    assert result.payment_status == "paid"
+
+    assert result.eligible is True
+
+    assert result.reason_code == "ELIGIBLE"
+    assert result.reason == ("The order is eligible for a full refund.")
+
+    assert result.refund_amount == Decimal("1999.00")
+    assert result.currency == "INR"
+
+    assert result.requires_confirmation is True
+    assert result.action_performed is False
+
+
+class RefundStatusScalarResult:
+    def __init__(self, statuses):
+        self.statuses = statuses
+
+    def all(self):
+        return self.statuses
+
+
+class RefundStatusSession:
+    def __init__(self, statuses):
+        self.statuses = statuses
+
+    def scalars(
+        self,
+        statement,
+    ):
+        return RefundStatusScalarResult(self.statuses)
+
+
+def test_existing_processing_refund_blocks_new_refund(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        module,
+        "get_order",
+        lambda db, order_number: OrderLookupResult(
+            found=True,
+            order_number="ORD-10003",
+            status="delivered",
+            payment_status="paid",
+            total_amount=Decimal("3899.00"),
+            currency="INR",
+        ),
+    )
+
+    result = module.check_refund_eligibility(
+        RefundStatusSession(["processing"]),
+        "ORD-10003",
+    )
+
+    assert result.found is True
+    assert result.order_number == "ORD-10003"
+
+    assert result.status == "delivered"
+    assert result.payment_status == "paid"
+
+    assert result.eligible is False
+
+    assert result.reason_code == ("REFUND_ALREADY_PROCESSING")
+    assert result.reason == ("A refund is already being processed for this order.")
+
+    assert result.refund_amount is None
+    assert result.currency is None
+
+    assert result.requires_confirmation is False
+    assert result.action_performed is False
