@@ -14,5 +14,10 @@ if not database_url:
 
 test_database_url = make_url(database_url).set(database="resolveai_test")
 
+if test_database_url.database != "resolveai_test":
+    raise RuntimeError(
+        "Tests must run against the resolveai_test database."
+    )
+
 
 os.environ["DATABASE_URL"] = test_database_url.render_as_string(hide_password=False)
