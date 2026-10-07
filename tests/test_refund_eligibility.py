@@ -1,6 +1,7 @@
+from decimal import Decimal
+
 import src.tools.refund_eligibility as module
 from src.tools.order_lookup import OrderLookupResult
-from decimal import Decimal
 
 
 class EmptyRefundScalarResult:
@@ -14,7 +15,6 @@ class FakeRefundSession:
         statement,
     ):
         return EmptyRefundScalarResult()
-
 
 
 def test_unknown_order_is_not_eligible(
@@ -107,12 +107,51 @@ def test_paid_processing_order_without_refund_is_eligible(
     assert result.eligible is True
 
     assert result.reason_code == "ELIGIBLE"
-    assert result.reason == (
-        "The order is eligible for a full refund."
-    )
+    assert result.reason == ("The order is eligible for a full refund.")
 
     assert result.refund_amount == Decimal("1299.00")
     assert result.currency == "INR"
 
     assert result.requires_confirmation is True
+    assert result.action_performed is False
+
+
+def test_paid_shipped_order_is_not_eligible(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        module,
+        "get_order",
+        lambda db, order_number: OrderLookupResult(
+            found=True,
+            order_number="ORD-10001",
+            status="shipped",
+            payment_status="paid",
+            total_amount=Decimal("2499.00"),
+            currency="INR",
+        ),
+    )
+
+    result = module.check_refund_eligibility(
+        FakeRefundSession(),
+        "ORD-10001",
+    )
+
+    assert result.found is True
+    assert result.order_number == "ORD-10001"
+
+    assert result.status == "shipped"
+    assert result.payment_status == "paid"
+
+    assert result.eligible is False
+
+    assert result.reason_code == "ORDER_SHIPPED"
+    assert result.reason == (
+        "The order has already shipped and is not eligible for a direct refund."
+    )
+
+    assert result.refund_amount is None
+    assert result.currency is None
+
+    assert result.requires_confirmation is False
     assert result.action_performed is False
