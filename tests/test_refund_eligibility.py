@@ -368,3 +368,65 @@ def test_failed_refund_allows_retry(
 
     assert result.requires_confirmation is True
     assert result.action_performed is False
+
+
+def test_failed_and_processing_refunds_are_blocked(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        module,
+        "get_order",
+        lambda db, order_number: OrderLookupResult(
+            found=True,
+            order_number="ORD-10009",
+            status="delivered",
+            payment_status="paid",
+            total_amount=Decimal("2499.00"),
+            currency="INR",
+        ),
+    )
+
+    result = module.check_refund_eligibility(
+        RefundStatusSession(["failed", "processing"]),
+        "ORD-10009",
+    )
+
+    assert result.eligible is False
+    assert result.reason_code == ("REFUND_ALREADY_PROCESSING")
+
+    assert result.refund_amount is None
+    assert result.currency is None
+
+    assert result.requires_confirmation is False
+    assert result.action_performed is False
+
+
+def test_failed_and_completed_refunds_are_blocked(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        module,
+        "get_order",
+        lambda db, order_number: OrderLookupResult(
+            found=True,
+            order_number="ORD-10010",
+            status="delivered",
+            payment_status="paid",
+            total_amount=Decimal("2499.00"),
+            currency="INR",
+        ),
+    )
+
+    result = module.check_refund_eligibility(
+        RefundStatusSession(["failed", "completed"]),
+        "ORD-10010",
+    )
+
+    assert result.eligible is False
+    assert result.reason_code == ("REFUND_ALREADY_COMPLETED")
+
+    assert result.refund_amount is None
+    assert result.currency is None
+
+    assert result.requires_confirmation is False
+    assert result.action_performed is False
