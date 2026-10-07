@@ -290,3 +290,42 @@ def test_existing_processing_refund_blocks_new_refund(
 
     assert result.requires_confirmation is False
     assert result.action_performed is False
+
+
+def test_existing_completed_refund_blocks_new_refund(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        module,
+        "get_order",
+        lambda db, order_number: OrderLookupResult(
+            found=True,
+            order_number="ORD-10007",
+            status="delivered",
+            payment_status="paid",
+            total_amount=Decimal("1599.00"),
+            currency="INR",
+        ),
+    )
+
+    result = module.check_refund_eligibility(
+        RefundStatusSession(["completed"]),
+        "ORD-10007",
+    )
+
+    assert result.found is True
+    assert result.order_number == "ORD-10007"
+
+    assert result.status == "delivered"
+    assert result.payment_status == "paid"
+
+    assert result.eligible is False
+
+    assert result.reason_code == ("REFUND_ALREADY_COMPLETED")
+    assert result.reason == ("This order has already been refunded.")
+
+    assert result.refund_amount is None
+    assert result.currency is None
+
+    assert result.requires_confirmation is False
+    assert result.action_performed is False

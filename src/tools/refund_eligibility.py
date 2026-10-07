@@ -119,6 +119,19 @@ def check_refund_eligibility(
             action_performed=False,
         )
 
+    if "completed" in normalized_refund_statuses:
+      return RefundEligibilityResult(
+          found=True,
+          order_number=order.order_number,
+          status=order.status,
+          payment_status=order.payment_status,
+          eligible=False,
+          reason_code="REFUND_ALREADY_COMPLETED",
+          reason="This order has already been refunded.",
+          requires_confirmation=False,
+          action_performed=False,
+      )
+
     if normalized_status in REFUND_ELIGIBLE_ORDER_STATUSES and not refund_statuses:
         return RefundEligibilityResult(
             found=True,
