@@ -12,12 +12,11 @@ from src.tools.cancellation_eligibility_tool import (
 from src.tools.order_lookup_tool import (
     OrderLookupTool,
 )
-from src.tools.refund_status_tool import (
-    RefundStatusTool,
-)
-
 from src.tools.refund_eligibility_tool import (
     RefundEligibilityTool,
+)
+from src.tools.refund_status_tool import (
+    RefundStatusTool,
 )
 
 ORDER_NUMBER_PATTERN = re.compile(
@@ -143,17 +142,12 @@ class ToolRouter:
     def __init__(
         self,
         order_lookup_tool: OrderLookupTool | None = None,
-        cancellation_eligibility_tool:
-            CancellationEligibilityTool | None = None,
-        refund_status_tool:
-            RefundStatusTool | None = None,
-        refund_eligibility_tool:
-            RefundEligibilityTool | None = None,
+        cancellation_eligibility_tool: CancellationEligibilityTool | None = None,
+        refund_status_tool: RefundStatusTool | None = None,
+        refund_eligibility_tool: RefundEligibilityTool | None = None,
     ):
         self.order_lookup_tool = (
-            order_lookup_tool
-            if order_lookup_tool is not None
-            else OrderLookupTool()
+            order_lookup_tool if order_lookup_tool is not None else OrderLookupTool()
         )
 
         self.cancellation_eligibility_tool = (
@@ -163,9 +157,7 @@ class ToolRouter:
         )
 
         self.refund_status_tool = (
-            refund_status_tool
-            if refund_status_tool is not None
-            else RefundStatusTool()
+            refund_status_tool if refund_status_tool is not None else RefundStatusTool()
         )
 
         self.refund_eligibility_tool = (

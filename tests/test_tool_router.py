@@ -121,10 +121,13 @@ def create_router_with_refund():
 
     refund = FakeRefundStatusTool()
 
+    refund_eligibility = FakeRefundEligibilityTool()
+
     router = ToolRouter(
         order_lookup_tool=order_lookup,
-        cancellation_eligibility_tool=(cancellation),
+        cancellation_eligibility_tool=cancellation,
         refund_status_tool=refund,
+        refund_eligibility_tool=refund_eligibility,
     )
 
     return (
@@ -377,11 +380,7 @@ def test_refund_action_request_uses_refund_eligibility_tool():
         refund_status,
     ) = create_router_with_refund()
 
-    refund_eligibility = FakeRefundEligibilityTool()
-
-    # Temporary injection for the RED test.
-    # The production constructor does not support this tool yet.
-    router.refund_eligibility_tool = refund_eligibility
+    refund_eligibility = router.refund_eligibility_tool
 
     result = router.run("Refund ORD-10002")
 
@@ -404,8 +403,7 @@ def test_refund_eligibility_question_uses_refund_eligibility_tool():
         refund_status,
     ) = create_router_with_refund()
 
-    refund_eligibility = FakeRefundEligibilityTool()
-    router.refund_eligibility_tool = refund_eligibility
+    refund_eligibility = router.refund_eligibility_tool
 
     result = router.run("Can I get a refund for ORD-10002?")
 
@@ -428,8 +426,7 @@ def test_refund_action_followup_uses_order_from_history():
         refund_status,
     ) = create_router_with_refund()
 
-    refund_eligibility = FakeRefundEligibilityTool()
-    router.refund_eligibility_tool = refund_eligibility
+    refund_eligibility = router.refund_eligibility_tool
 
     history = [
         ConversationTurn(
@@ -466,8 +463,7 @@ def test_refund_status_request_does_not_use_refund_eligibility_tool():
         refund_status,
     ) = create_router_with_refund()
 
-    refund_eligibility = FakeRefundEligibilityTool()
-    router.refund_eligibility_tool = refund_eligibility
+    refund_eligibility = router.refund_eligibility_tool
 
     result = router.run("What is the refund status for ORD-10003?")
 
