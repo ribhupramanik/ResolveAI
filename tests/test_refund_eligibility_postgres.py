@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -334,4 +334,107 @@ def test_failed_refund_allows_retry_in_postgres():
 
         finally:
             # Roll back all temporary records.
+            db.rollback()
+
+
+def test_failed_and_processing_refunds_block_retry_in_postgres():
+
+    assert engine.url.database == "resolveai_test"
+
+    with SessionLocal() as db:
+        try:
+            database_name = db.execute(text("SELECT current_database()")).scalar_one()
+
+            assert database_name == "resolveai_test"
+
+            suffix = uuid4().hex
+
+            customer = Customer(
+                customer_code=f"TST-{suffix[:20]}",
+                name="Multiple Refunds Test",
+                email=f"multiple-refunds-{suffix}@example.com",
+            )
+
+            db.add(customer)
+            db.flush()
+
+            order = Order(
+                order_number=f"ORD-{uuid4().int % 10**18:018d}",
+                customer_id=customer.id,
+                status="delivered",
+                payment_status="paid",
+                total_amount=Decimal("2499.00"),
+                currency="INR",
+                shipping_address="Test address",
+            )
+
+            db.add(order)
+            db.flush()
+
+            now = datetime.now(timezone.utc)
+
+            # Older refund is still processing.
+            processing_refund = Refund(
+                refund_number=f"REF-TST-{uuid4().hex[:20]}",
+                order_id=order.id,
+                status="processing",
+                amount=Decimal("2499.00"),
+                currency="INR",
+                initiated_at=now - timedelta(days=1),
+                completed_at=None,
+                failure_reason=None,
+            )
+
+            # Newer refund has failed.
+            failed_refund = Refund(
+                refund_number=f"REF-TST-{uuid4().hex[:20]}",
+                order_id=order.id,
+                status="failed",
+                amount=Decimal("2499.00"),
+                currency="INR",
+                initiated_at=now,
+                completed_at=None,
+                failure_reason="Demo refund failure",
+            )
+
+            db.add_all(
+                [
+                    processing_refund,
+                    failed_refund,
+                ]
+            )
+
+            db.flush()
+
+            # Execute the real eligibility function.
+            result = check_refund_eligibility(
+                db,
+                order.order_number,
+            )
+
+            assert result.found is True
+            assert result.order_number == order.order_number
+
+            assert result.eligible is False
+
+            assert result.reason_code == ("REFUND_ALREADY_PROCESSING")
+
+            assert result.reason == (
+                "A refund is already being processed for this order."
+            )
+
+            assert result.refund_amount is None
+            assert result.currency is None
+
+            assert result.requires_confirmation is False
+            assert result.action_performed is False
+
+            # Eligibility must not modify either refund.
+            db.refresh(processing_refund)
+            db.refresh(failed_refund)
+
+            assert processing_refund.status == "processing"
+            assert failed_refund.status == "failed"
+
+        finally:
             db.rollback()
