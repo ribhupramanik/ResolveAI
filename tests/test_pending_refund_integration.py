@@ -316,3 +316,62 @@ def test_invalid_refund_amount_does_not_create_pending_action(
     )
 
     assert pending_action is None
+
+
+@pytest.mark.parametrize(
+    "currency",
+    [
+        None,
+        123,
+        "",
+        "IN",
+        "INRR",
+        "IN1",
+        "₹",
+        "IN R",
+    ],
+)
+def test_invalid_refund_currency_does_not_create_pending_action(
+    monkeypatch,
+    currency,
+):
+    db = object()
+
+    class FakePendingActionService:
+        def __init__(self, session):
+            raise AssertionError(
+                "PendingActionService must not be created "
+                "when the refund currency is invalid."
+            )
+
+    monkeypatch.setattr(
+        module,
+        "PendingActionService",
+        FakePendingActionService,
+    )
+
+    result = SimpleNamespace(
+        used_fallback=False,
+        tool_used=True,
+        tool_name="check_refund_eligibility",
+        tool_success=True,
+        tool_data={
+            "found": True,
+            "order_number": "ORD-10002",
+            "status": "processing",
+            "payment_status": "paid",
+            "eligible": True,
+            "refund_amount": "1299.00",
+            "currency": currency,
+            "requires_confirmation": True,
+            "action_performed": False,
+        },
+    )
+
+    pending_action = module.maybe_create_pending_refund(
+        db=db,
+        conversation_id=42,
+        result=result,
+    )
+
+    assert pending_action is None
