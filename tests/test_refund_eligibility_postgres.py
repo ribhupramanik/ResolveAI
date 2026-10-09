@@ -3,12 +3,16 @@ from decimal import Decimal
 from uuid import uuid4
 
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
+import src.tools.refund_eligibility_tool as refund_tool_module
 from src.db.database import SessionLocal, engine
 from src.db.models import Customer, Order, Refund
+from src.tools.base import ToolResult
 from src.tools.refund_eligibility import (
     check_refund_eligibility,
 )
+from src.tools.router import ToolRouter
 
 
 def test_refund_checks_use_test_database():
@@ -438,3 +442,106 @@ def test_failed_and_processing_refunds_block_retry_in_postgres():
 
         finally:
             db.rollback()
+
+
+def test_refund_action_routes_through_real_tool_to_postgres(
+    monkeypatch,
+):
+    # Protect the development database.
+    assert engine.url.database == "resolveai_test"
+
+    with engine.connect() as connection:
+        transaction = connection.begin()
+
+        try:
+            # Verify the actual PostgreSQL database.
+            database_name = connection.execute(
+                text("SELECT current_database()")
+            ).scalar_one()
+
+            assert database_name == "resolveai_test"
+
+            # Use the same database connection
+            # for setup and operational tool execution.
+            with Session(
+                bind=connection,
+                join_transaction_mode="create_savepoint",
+            ) as db:
+                suffix = uuid4().hex
+
+                customer = Customer(
+                    customer_code=f"TST-{suffix[:20]}",
+                    name="Router Integration Test",
+                    email=f"router-test-{suffix}@example.com",
+                )
+
+                db.add(customer)
+                db.flush()
+
+                order_number = f"ORD-{uuid4().int % 10**18:018d}"
+
+                order = Order(
+                    order_number=order_number,
+                    customer_id=customer.id,
+                    status="processing",
+                    payment_status="paid",
+                    total_amount=Decimal("1299.00"),
+                    currency="INR",
+                    shipping_address="Test address",
+                )
+
+                db.add(order)
+                db.flush()
+
+                # The real tool normally creates a
+                # new session using SessionLocal().
+                #
+                # For this integration test, bind it
+                # to our existing test connection.
+                monkeypatch.setattr(
+                    refund_tool_module,
+                    "SessionLocal",
+                    lambda: Session(
+                        bind=connection,
+                        join_transaction_mode="create_savepoint",
+                    ),
+                )
+
+                # Real router.
+                # Real RefundEligibilityTool.
+                # Real eligibility function.
+                # Real PostgreSQL queries.
+                router = ToolRouter()
+
+                result = router.run(f"Refund {order_number}")
+
+                assert isinstance(result, ToolResult)
+
+                assert result.tool_name == ("check_refund_eligibility")
+
+                assert result.success is True
+                assert result.error is None
+
+                assert result.data["found"] is True
+
+                assert result.data["order_number"] == order_number
+
+                assert result.data["status"] == "processing"
+
+                assert result.data["payment_status"] == "paid"
+
+                assert result.data["eligible"] is True
+
+                assert result.data["reason_code"] == "ELIGIBLE"
+
+                assert result.data["refund_amount"] == "1299.00"
+
+                assert result.data["currency"] == "INR"
+
+                assert result.data["requires_confirmation"] is True
+
+                assert result.data["action_performed"] is False
+
+        finally:
+            # Always undo test database changes.
+            transaction.rollback()
