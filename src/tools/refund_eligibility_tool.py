@@ -13,9 +13,11 @@ class RefundEligibilityTool:
         order_number: str,
     ) -> ToolResult:
 
-        db = SessionLocal()
+        db = None
 
         try:
+            db = SessionLocal()
+
             result = check_refund_eligibility(
                 db,
                 order_number,
@@ -65,4 +67,5 @@ class RefundEligibilityTool:
             )
 
         finally:
-            db.close()
+            if db is not None:
+                db.close()
