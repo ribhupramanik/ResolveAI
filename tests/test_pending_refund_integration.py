@@ -128,7 +128,6 @@ def test_failed_refund_tool_does_not_create_pending_action(
     db = object()
 
     class FakePendingActionService:
-
         def __init__(self, session):
             raise AssertionError(
                 "PendingActionService must not be created "
@@ -146,6 +145,51 @@ def test_failed_refund_tool_does_not_create_pending_action(
         tool_used=True,
         tool_name="check_refund_eligibility",
         tool_success=False,
+        tool_data={
+            "found": True,
+            "order_number": "ORD-10002",
+            "status": "processing",
+            "payment_status": "paid",
+            "eligible": True,
+            "refund_amount": "1299.00",
+            "currency": "INR",
+            "requires_confirmation": True,
+            "action_performed": False,
+        },
+    )
+
+    pending_action = module.maybe_create_pending_refund(
+        db=db,
+        conversation_id=42,
+        result=result,
+    )
+
+    assert pending_action is None
+
+
+def test_refund_fallback_does_not_create_pending_action(
+    monkeypatch,
+):
+    db = object()
+
+    class FakePendingActionService:
+        def __init__(self, session):
+            raise AssertionError(
+                "PendingActionService must not be created "
+                "when the RAG pipeline uses fallback."
+            )
+
+    monkeypatch.setattr(
+        module,
+        "PendingActionService",
+        FakePendingActionService,
+    )
+
+    result = SimpleNamespace(
+        used_fallback=True,
+        tool_used=True,
+        tool_name="check_refund_eligibility",
+        tool_success=True,
         tool_data={
             "found": True,
             "order_number": "ORD-10002",
