@@ -168,3 +168,80 @@ def test_existing_processing_refund_blocks_new_refund_in_postgres():
         finally:
             # Remove all temporary test records.
             db.rollback()
+
+
+def test_existing_completed_refund_blocks_new_refund_in_postgres():
+
+    assert engine.url.database == "resolveai_test"
+
+    with SessionLocal() as db:
+        try:
+            database_name = db.execute(text("SELECT current_database()")).scalar_one()
+
+            assert database_name == "resolveai_test"
+
+            suffix = uuid4().hex
+
+            customer = Customer(
+                customer_code=f"TST-{suffix[:20]}",
+                name="Completed Refund Test",
+                email=f"refund-completed-{suffix}@example.com",
+            )
+
+            db.add(customer)
+            db.flush()
+
+            order = Order(
+                order_number=f"ORD-{uuid4().int % 10**18:018d}",
+                customer_id=customer.id,
+                status="delivered",
+                payment_status="paid",
+                total_amount=Decimal("1599.00"),
+                currency="INR",
+                shipping_address="Test address",
+            )
+
+            db.add(order)
+            db.flush()
+
+            now = datetime.now(timezone.utc)
+
+            refund = Refund(
+                refund_number=f"REF-TST-{uuid4().hex[:20]}",
+                order_id=order.id,
+                status="completed",
+                amount=Decimal("1599.00"),
+                currency="INR",
+                initiated_at=now,
+                completed_at=now,
+                failure_reason=None,
+            )
+
+            db.add(refund)
+            db.flush()
+
+            result = check_refund_eligibility(
+                db,
+                order.order_number,
+            )
+
+            assert result.found is True
+            assert result.order_number == order.order_number
+
+            assert result.status == "delivered"
+            assert result.payment_status == "paid"
+
+            assert result.eligible is False
+
+            assert result.reason_code == ("REFUND_ALREADY_COMPLETED")
+
+            assert result.reason == ("This order has already been refunded.")
+
+            assert result.refund_amount is None
+            assert result.currency is None
+
+            assert result.requires_confirmation is False
+            assert result.action_performed is False
+
+        finally:
+            db.rollback()
