@@ -104,3 +104,62 @@ def test_eligible_refund_returns_serialized_tool_result(
     }
 
     assert session.closed is True
+
+
+def test_unknown_order_returns_safe_failure(
+    monkeypatch,
+):
+    class FakeSession:
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    session = FakeSession()
+
+    monkeypatch.setattr(
+        module,
+        "SessionLocal",
+        lambda: session,
+    )
+
+    def fake_check_refund_eligibility(
+        db,
+        order_number,
+    ):
+        assert db is session
+        assert order_number == "ORD-99999"
+
+        return RefundEligibilityResult(
+            found=False,
+            order_number="ORD-99999",
+            eligible=None,
+            reason_code="ORDER_NOT_FOUND",
+            reason="Order not found.",
+            requires_confirmation=False,
+            action_performed=False,
+        )
+
+    monkeypatch.setattr(
+        module,
+        "check_refund_eligibility",
+        fake_check_refund_eligibility,
+    )
+
+    tool = module.RefundEligibilityTool()
+
+    result = tool.execute("ORD-99999")
+
+    assert result.tool_name == ("check_refund_eligibility")
+
+    assert result.success is False
+
+    assert result.error == "Order not found."
+
+    assert result.data == {
+        "order_number": "ORD-99999",
+        "found": False,
+    }
+
+    assert session.closed is True
