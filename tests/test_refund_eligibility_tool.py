@@ -163,3 +163,55 @@ def test_unknown_order_returns_safe_failure(
     }
 
     assert session.closed is True
+
+
+def test_eligibility_evaluation_failure_returns_safe_error(
+    monkeypatch,
+):
+    class FakeSession:
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    session = FakeSession()
+
+    monkeypatch.setattr(
+        module,
+        "SessionLocal",
+        lambda: session,
+    )
+
+    def failing_eligibility_check(
+        db,
+        order_number,
+    ):
+        assert db is session
+        assert order_number == "ORD-10002"
+
+        raise RuntimeError("Sensitive internal database error details")
+
+    monkeypatch.setattr(
+        module,
+        "check_refund_eligibility",
+        failing_eligibility_check,
+    )
+
+    tool = module.RefundEligibilityTool()
+
+    result = tool.execute("ORD-10002")
+
+    assert result.tool_name == ("check_refund_eligibility")
+
+    assert result.success is False
+
+    assert result.data == {
+        "order_number": "ORD-10002",
+    }
+
+    assert result.error == ("Refund eligibility check failed.")
+
+    assert "Sensitive internal database error details" not in str(result)
+
+    assert session.closed is True
