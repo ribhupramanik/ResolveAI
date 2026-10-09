@@ -74,3 +74,49 @@ def test_eligible_refund_creates_pending_action(
     assert action_data["requires_confirmation"] is True
 
     assert action_data["action_performed"] is False
+
+
+def test_ineligible_refund_does_not_create_pending_action(
+    monkeypatch,
+):
+    db = object()
+
+    class FakePendingActionService:
+        def __init__(self, session):
+            raise AssertionError(
+                "PendingActionService must not be created for an ineligible refund."
+            )
+
+    monkeypatch.setattr(
+        module,
+        "PendingActionService",
+        FakePendingActionService,
+    )
+
+    result = SimpleNamespace(
+        used_fallback=False,
+        tool_used=True,
+        tool_name="check_refund_eligibility",
+        tool_success=True,
+        tool_data={
+            "found": True,
+            "order_number": "ORD-10002",
+            "status": "delivered",
+            "payment_status": "paid",
+            "eligible": False,
+            "reason_code": "REFUND_ALREADY_COMPLETED",
+            "reason": "This order has already been refunded.",
+            "refund_amount": None,
+            "currency": None,
+            "requires_confirmation": False,
+            "action_performed": False,
+        },
+    )
+
+    pending_action = module.maybe_create_pending_refund(
+        db=db,
+        conversation_id=42,
+        result=result,
+    )
+
+    assert pending_action is None
