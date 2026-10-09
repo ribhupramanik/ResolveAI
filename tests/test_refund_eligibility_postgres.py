@@ -245,3 +245,93 @@ def test_existing_completed_refund_blocks_new_refund_in_postgres():
 
         finally:
             db.rollback()
+
+
+def test_failed_refund_allows_retry_in_postgres():
+
+    # Never modify the development database.
+    assert engine.url.database == "resolveai_test"
+
+    with SessionLocal() as db:
+        try:
+            # Verify the actual PostgreSQL connection.
+            database_name = db.execute(text("SELECT current_database()")).scalar_one()
+
+            assert database_name == "resolveai_test"
+
+            suffix = uuid4().hex
+
+            # Create a temporary customer.
+            customer = Customer(
+                customer_code=f"TST-{suffix[:20]}",
+                name="Failed Refund Retry Test",
+                email=f"refund-retry-{suffix}@example.com",
+            )
+
+            db.add(customer)
+            db.flush()
+
+            # Create a paid, delivered order.
+            order = Order(
+                order_number=f"ORD-{uuid4().int % 10**18:018d}",
+                customer_id=customer.id,
+                status="delivered",
+                payment_status="paid",
+                total_amount=Decimal("2199.00"),
+                currency="INR",
+                shipping_address="Test address",
+            )
+
+            db.add(order)
+            db.flush()
+
+            # Create a historical failed refund.
+            refund = Refund(
+                refund_number=f"REF-TST-{uuid4().hex[:20]}",
+                order_id=order.id,
+                status="failed",
+                amount=Decimal("2199.00"),
+                currency="INR",
+                initiated_at=datetime.now(timezone.utc),
+                completed_at=None,
+                failure_reason="Demo refund processing failure",
+            )
+
+            db.add(refund)
+            db.flush()
+
+            # Execute the real refund eligibility check.
+            result = check_refund_eligibility(
+                db,
+                order.order_number,
+            )
+
+            assert result.found is True
+            assert result.order_number == order.order_number
+
+            assert result.status == "delivered"
+            assert result.payment_status == "paid"
+
+            # Failed refunds do not block retries.
+            assert result.eligible is True
+            assert result.reason_code == "ELIGIBLE"
+
+            assert result.reason == ("The order is eligible for a full refund.")
+
+            # Financial values come from the order.
+            assert result.refund_amount == Decimal("2199.00")
+            assert result.currency == "INR"
+
+            # Eligibility never performs the action.
+            assert result.requires_confirmation is True
+            assert result.action_performed is False
+
+            # Verify the existing refund was not modified.
+            db.refresh(refund)
+
+            assert refund.status == "failed"
+            assert refund.failure_reason == ("Demo refund processing failure")
+
+        finally:
+            # Roll back all temporary records.
+            db.rollback()
