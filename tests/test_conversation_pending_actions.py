@@ -2121,3 +2121,114 @@ def test_reject_pending_refund_endpoint_is_idempotent(
         f"has been rejected. "
         f"No refund has been initiated."
     )
+
+
+@pytest.mark.parametrize(
+    "endpoint_suffix",
+    [
+        "execute",
+        "confirm-and-execute",
+    ],
+)
+def test_cancellation_execution_endpoints_reject_refund_actions(
+    client,
+    db,
+    execution_case_factory,
+    fake_pipeline,
+    endpoint_suffix,
+):
+    # Create a real order, conversation,
+    # and pending action in the test database.
+    case = execution_case_factory(
+        action_status="pending",
+    )
+
+    order = case["order"]
+    conversation = case["conversation"]
+    action = case["action"]
+
+    order_id = order.id
+    action_id = action.id
+    conversation_id = conversation.id
+
+    # Convert the action into a refund request.
+    action.action_type = "initiate_refund"
+
+    action.action_data = {
+        "order_status": "processing",
+        "payment_status": "paid",
+        "refund_amount": "999.00",
+        "currency": "INR",
+        "eligible": True,
+        "requires_confirmation": True,
+        "action_performed": False,
+    }
+
+    db.commit()
+
+    # Attempt to execute the refund through
+    # a cancellation-specific endpoint.
+    response = client.post(
+        f"/api/v1/conversations/"
+        f"{conversation_id}/pending-actions/"
+        f"{action_id}/{endpoint_suffix}"
+    )
+
+    # Neither endpoint may execute refunds.
+    assert response.status_code == 409
+
+    assert response.json() == {
+        "detail": ("Pending action cannot be executed by this endpoint."),
+    }
+
+    # Reload authoritative database state.
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order_id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action_id,
+    )
+
+    # No order cancellation occurred.
+    assert stored_order is not None
+    assert stored_order.status == "processing"
+
+    # The refund request must remain pending.
+    assert stored_action is not None
+    assert stored_action.action_type == "initiate_refund"
+    assert stored_action.status == "pending"
+
+    # Confirmation must not be recorded.
+    assert stored_action.confirmed_at is None
+
+    assert stored_action.action_data["action_performed"] is False
+
+    # No refund was initiated.
+    refund = db.scalar(select(Refund).where(Refund.order_id == order_id))
+
+    assert refund is None
+
+    # No execution audit was created.
+    audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action_id
+        )
+    )
+
+    assert audit is None
+
+    # Execution endpoints never invoke RAG.
+    assert fake_pipeline.run_calls == 0
+
+    # Rejected execution attempts should not
+    # create customer-visible assistant messages.
+    messages_response = client.get(f"/api/v1/conversations/{conversation_id}/messages")
+
+    assert messages_response.status_code == 200
+
+    assert messages_response.json() == []
