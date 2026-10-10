@@ -1891,3 +1891,115 @@ def test_no_rejects_pending_refund_without_pipeline(
     assert data["pending_action"] is None
 
     assert service.get_pending_action(conversation.id) is None
+
+
+def test_reject_pending_refund_via_exact_id(
+    client,
+    db,
+    execution_case_factory,
+    fake_pipeline,
+):
+    # Create a real test order, conversation,
+    # and pending action.
+    case = execution_case_factory(
+        action_status="pending",
+    )
+
+    order = case["order"]
+    conversation = case["conversation"]
+    action = case["action"]
+
+    order_id = order.id
+    action_id = action.id
+
+    # Convert the pending cancellation created
+    # by the fixture into a refund request.
+    action.action_type = "initiate_refund"
+
+    action.action_data = {
+        "order_status": "processing",
+        "payment_status": "paid",
+        "refund_amount": "999.00",
+        "currency": "INR",
+        "eligible": True,
+        "requires_confirmation": True,
+        "action_performed": False,
+    }
+
+    db.commit()
+
+    # Reject the exact refund PendingAction.
+    response = client.post(
+        f"/api/v1/conversations/{conversation.id}/pending-actions/{action_id}/reject"
+    )
+
+    assert response.status_code == 200
+
+    # Verify the API response.
+    assert response.json() == {
+        "id": action_id,
+        "action_type": "initiate_refund",
+        "target_identifier": order.order_number,
+        "status": "rejected",
+    }
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order_id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action_id,
+    )
+
+    # The order must remain unchanged.
+    assert stored_order is not None
+    assert stored_order.status == "processing"
+
+    # Only the pending action is rejected.
+    assert stored_action is not None
+    assert stored_action.status == "rejected"
+
+    assert stored_action.confirmed_at is None
+
+    assert stored_action.action_data["action_performed"] is False
+
+    # No refund record should exist.
+    refund = db.scalar(select(Refund).where(Refund.order_id == order_id))
+
+    assert refund is None
+
+    # No execution audit should exist.
+    audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action_id
+        )
+    )
+
+    assert audit is None
+
+    # Explicit rejection must not use the RAG pipeline.
+    assert fake_pipeline.run_calls == 0
+
+    # Verify the saved assistant response.
+    messages_response = client.get(f"/api/v1/conversations/{conversation.id}/messages")
+
+    assert messages_response.status_code == 200
+
+    messages = messages_response.json()
+
+    assistant_messages = [
+        message for message in messages if message["role"] == "assistant"
+    ]
+
+    assert len(assistant_messages) == 1
+
+    assert assistant_messages[0]["content"] == (
+        f"The pending refund request for "
+        f"{order.order_number} "
+        f"has been rejected. "
+        f"No refund has been initiated."
+    )

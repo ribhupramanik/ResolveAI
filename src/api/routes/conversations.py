@@ -464,12 +464,15 @@ def reject_pending_action_by_id(
                 detail="Pending action not found.",
             )
 
-        if action.action_type != "cancel_order" or action.target_type != "order":
+        if action.target_type != "order" or action.action_type not in {
+            "cancel_order",
+            "initiate_refund",
+        }:
             db.rollback()
 
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=("Pending action cannot be rejected by this endpoint."),
+                detail="Pending action cannot be rejected by this endpoint.",
             )
 
         # First rejection:
@@ -477,12 +480,24 @@ def reject_pending_action_by_id(
         if action.status == PENDING:
             action.status = REJECTED
 
-            assistant_text = (
-                f"The pending cancellation request for "
-                f"{action.target_identifier} "
-                f"has been rejected. "
-                f"No cancellation has been performed."
-            )
+            # Generate a rejection message based on
+            # the actual PendingAction type.
+            if action.action_type == "initiate_refund":
+                assistant_text = (
+                    f"The pending refund request for "
+                    f"{action.target_identifier} "
+                    f"has been rejected. "
+                    f"No refund has been initiated."
+                )
+
+            else:
+                # Preserve the existing cancellation response.
+                assistant_text = (
+                    f"The pending cancellation request for "
+                    f"{action.target_identifier} "
+                    f"has been rejected. "
+                    f"No cancellation has been performed."
+                )
 
             assistant_message = Message(
                 conversation_id=conversation.id,
@@ -697,7 +712,6 @@ def send_message(
                     raise RuntimeError("Unexpected cancellation execution result.")
 
             elif pending_decision.decision == "rejected":
-
                 if (
                     action.action_type == "initiate_refund"
                     and action.target_type == "order"
@@ -757,15 +771,6 @@ def send_message(
 
             conversation.updated_at = datetime.now(timezone.utc)
 
-            # This is the only commit.
-            #
-            # For typed confirmation it atomically commits:
-            # - the user's "yes" message
-            # - pending -> confirmed
-            # - order cancellation / invalidation
-            # - pending -> executed / invalidated
-            # - execution audit
-            # - assistant result message
             db.commit()
 
             db.refresh(user_message)
