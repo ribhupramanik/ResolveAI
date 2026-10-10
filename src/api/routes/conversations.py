@@ -56,6 +56,7 @@ from src.services.pending_action_confirmation import (
 )
 from src.services.pending_action_integration import (
     maybe_create_pending_cancellation,
+    maybe_create_pending_refund,
 )
 from src.services.pending_action_service import (
     CONFIRMED,
@@ -777,7 +778,18 @@ def send_message(
             conversation_history=(conversation_history),
         )
 
+        # Create a cancellation PendingAction only when
+        # cancellation eligibility requires confirmation.
         maybe_create_pending_cancellation(
+            db=db,
+            conversation_id=conversation.id,
+            result=result,
+        )
+
+        # Create a refund PendingAction only when
+        # refund eligibility requires confirmation.
+        # This does not initiate or execute a refund.
+        maybe_create_pending_refund(
             db=db,
             conversation_id=conversation.id,
             result=result,
@@ -785,7 +797,9 @@ def send_message(
 
         pending_action_service = PendingActionService(db)
 
-        pending_action = pending_action_service.get_pending_action(conversation.id)
+        pending_action = pending_action_service.get_pending_action(
+            conversation.id
+        )
 
         retry_trigger_issues = [
             {
@@ -895,3 +909,5 @@ def send_message(
         metadata=metadata,
         pending_action=pending_action_response,
     )
+
+
