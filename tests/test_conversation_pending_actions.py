@@ -1826,3 +1826,68 @@ def test_eligible_refund_returns_pending_action(
     assert action_data["requires_confirmation"] is True
 
     assert action_data["action_performed"] is False
+
+
+def test_no_rejects_pending_refund_without_pipeline(
+    client,
+    db,
+    conversation,
+    fake_pipeline,
+):
+    # Create a refund PendingAction.
+    service = PendingActionService(db)
+
+    action = service.create_pending_action(
+        conversation_id=conversation.id,
+        action_type="initiate_refund",
+        target_type="order",
+        target_identifier="ORD-10002",
+        action_data={
+            "order_status": "processing",
+            "payment_status": "paid",
+            "refund_amount": "1299.00",
+            "currency": "INR",
+            "eligible": True,
+            "requires_confirmation": True,
+            "action_performed": False,
+        },
+    )
+
+    assert action.status == "pending"
+
+    # Customer rejects the refund.
+    response = client.post(
+        f"/api/v1/conversations/{conversation.id}/messages",
+        json={
+            "message": "no",
+        },
+    )
+
+    assert response.status_code == 201
+
+    # Reload the PendingAction.
+    db.refresh(action)
+
+    # Verify rejection state.
+    assert action.status == "rejected"
+
+    assert action.confirmed_at is None
+
+    assert action.action_data["action_performed"] is False
+
+    # Rejection should not invoke the RAG pipeline.
+    assert fake_pipeline.run_calls == 0
+
+    data = response.json()
+
+    # Verify refund-specific response.
+    assert data["assistant_message"]["content"] == (
+        "The pending refund request for "
+        "ORD-10002 has been rejected. "
+        "No refund has been initiated."
+    )
+
+    # No active PendingAction remains.
+    assert data["pending_action"] is None
+
+    assert service.get_pending_action(conversation.id) is None

@@ -697,12 +697,34 @@ def send_message(
                     raise RuntimeError("Unexpected cancellation execution result.")
 
             elif pending_decision.decision == "rejected":
-                assistant_text = (
-                    f"The pending cancellation request for "
-                    f"{action.target_identifier} "
-                    f"has been rejected. "
-                    f"No cancellation has been performed."
-                )
+
+                if (
+                    action.action_type == "initiate_refund"
+                    and action.target_type == "order"
+                ):
+                    assistant_text = (
+                        f"The pending refund request for "
+                        f"{action.target_identifier} "
+                        f"has been rejected. "
+                        f"No refund has been initiated."
+                    )
+
+                elif (
+                    action.action_type == "cancel_order"
+                    and action.target_type == "order"
+                ):
+                    assistant_text = (
+                        f"The pending cancellation request for "
+                        f"{action.target_identifier} "
+                        f"has been rejected. "
+                        f"No cancellation has been performed."
+                    )
+
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Pending action cannot be rejected through chat.",
+                    )
 
             else:
                 raise RuntimeError("Unknown pending action decision.")
@@ -797,9 +819,7 @@ def send_message(
 
         pending_action_service = PendingActionService(db)
 
-        pending_action = pending_action_service.get_pending_action(
-            conversation.id
-        )
+        pending_action = pending_action_service.get_pending_action(conversation.id)
 
         retry_trigger_issues = [
             {
@@ -909,5 +929,3 @@ def send_message(
         metadata=metadata,
         pending_action=pending_action_response,
     )
-
-
