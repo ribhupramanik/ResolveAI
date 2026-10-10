@@ -1680,8 +1680,7 @@ def test_chat_refund_confirmation_does_not_execute_cancellation(
     # receive a refund action.
     def forbidden_cancellation_execution(*args, **kwargs):
         raise AssertionError(
-            "CancellationExecutionService must not "
-            "be called for refund initiation."
+            "CancellationExecutionService must not be called for refund initiation."
         )
 
     monkeypatch.setattr(
@@ -1692,8 +1691,7 @@ def test_chat_refund_confirmation_does_not_execute_cancellation(
 
     # Customer attempts to confirm the refund.
     response = client.post(
-        f"/api/v1/conversations/"
-        f"{conversation.id}/messages",
+        f"/api/v1/conversations/{conversation.id}/messages",
         json={
             "message": "yes",
         },
@@ -1725,25 +1723,17 @@ def test_chat_refund_confirmation_does_not_execute_cancellation(
     assert stored_action.status == "pending"
     assert stored_action.confirmed_at is None
 
-    assert (
-        stored_action.action_data["action_performed"]
-        is False
-    )
+    assert stored_action.action_data["action_performed"] is False
 
     # No refund record was created.
-    refund = db.scalar(
-        select(Refund).where(
-            Refund.order_id == order_id
-        )
-    )
+    refund = db.scalar(select(Refund).where(Refund.order_id == order_id))
 
     assert refund is None
 
     # No execution audit was created.
     audit = db.scalar(
         select(ActionExecutionAudit).where(
-            ActionExecutionAudit.pending_action_id
-            == action_id
+            ActionExecutionAudit.pending_action_id == action_id
         )
     )
 
@@ -1751,3 +1741,88 @@ def test_chat_refund_confirmation_does_not_execute_cancellation(
 
     # Confirmation handling should not invoke RAG.
     assert fake_pipeline.run_calls == 0
+
+
+def test_eligible_refund_returns_pending_action(
+    app,
+    db,
+    conversation,
+):
+    refund_pipeline = CountingFakePipeline(
+        tool_used=True,
+        tool_name="check_refund_eligibility",
+        tool_success=True,
+        tool_data={
+            "found": True,
+            "order_number": "ORD-10002",
+            "status": "processing",
+            "payment_status": "paid",
+            "eligible": True,
+            "reason_code": "ELIGIBLE",
+            "reason": ("The order is eligible for a full refund."),
+            "refund_amount": "1299.00",
+            "currency": "INR",
+            "requires_confirmation": True,
+            "action_performed": False,
+        },
+    )
+
+    app.dependency_overrides[get_pipeline] = lambda: refund_pipeline
+
+    client = TestClient(app)
+
+    response = client.post(
+        f"/api/v1/conversations/{conversation.id}/messages",
+        json={
+            "message": "Refund ORD-10002",
+        },
+    )
+
+    assert response.status_code == 201
+
+    assert refund_pipeline.run_calls == 1
+
+    data = response.json()
+
+    pending = data["pending_action"]
+
+    # The API must return a refund PendingAction.
+    assert pending is not None
+
+    assert pending["action_type"] == ("initiate_refund")
+
+    assert pending["target_identifier"] == ("ORD-10002")
+
+    assert pending["status"] == "pending"
+
+    # Verify the PendingAction was actually stored.
+    service = PendingActionService(db)
+
+    stored_action = service.get_pending_action(conversation.id)
+
+    assert stored_action is not None
+
+    assert stored_action.id == pending["id"]
+
+    assert stored_action.action_type == ("initiate_refund")
+
+    assert stored_action.target_type == "order"
+
+    assert stored_action.target_identifier == ("ORD-10002")
+
+    assert stored_action.status == "pending"
+
+    assert stored_action.confirmed_at is None
+
+    # Verify the financial snapshot.
+    action_data = stored_action.action_data
+
+    assert action_data["refund_amount"] == ("1299.00")
+
+    assert action_data["currency"] == "INR"
+
+    assert action_data["eligible"] is True
+
+    assert action_data["requires_confirmation"] is True
+
+    assert action_data["action_performed"] is False
