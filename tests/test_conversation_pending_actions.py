@@ -2352,3 +2352,109 @@ def test_non_actionable_refund_results_do_not_create_pending_action(
     assert pending_response.status_code == 200
 
     assert pending_response.json() is None
+
+
+def test_ineligible_refund_does_not_supersede_existing_pending_action(
+    app,
+    db,
+    conversation,
+):
+    # Step 1: Create an existing cancellation PendingAction.
+    existing_action = create_pending_cancellation(
+        db,
+        conversation,
+    )
+
+    existing_action_id = existing_action.id
+
+    assert existing_action.status == "pending"
+    assert existing_action.action_type == "cancel_order"
+
+    # Step 2: Simulate an ineligible refund result.
+    refund_pipeline = CountingFakePipeline(
+        tool_used=True,
+        tool_name="check_refund_eligibility",
+        tool_success=True,
+        tool_data={
+            "found": True,
+            "order_number": "ORD-10002",
+            "status": "shipped",
+            "payment_status": "paid",
+            "eligible": False,
+            "reason": ("The order is not eligible for a refund."),
+            "refund_amount": "1299.00",
+            "currency": "INR",
+            "requires_confirmation": False,
+            "action_performed": False,
+        },
+    )
+
+    app.dependency_overrides[get_pipeline] = lambda: refund_pipeline
+
+    client = TestClient(app)
+
+    # Step 3: Customer asks about refund eligibility.
+    response = client.post(
+        f"/api/v1/conversations/{conversation.id}/messages",
+        json={
+            "message": ("Is order ORD-10002 eligible for a refund?"),
+        },
+    )
+
+    assert response.status_code == 201
+
+    assert refund_pipeline.run_calls == 1
+
+    data = response.json()
+
+    # Step 4: The API should still return
+    # the original pending cancellation.
+    pending = data["pending_action"]
+
+    assert pending is not None
+
+    assert pending == {
+        "id": existing_action_id,
+        "action_type": "cancel_order",
+        "target_identifier": "ORD-10002",
+        "status": "pending",
+    }
+
+    # Step 5: Reload the database state.
+    db.expire_all()
+
+    stored_action = db.get(
+        PendingAction,
+        existing_action_id,
+    )
+
+    assert stored_action is not None
+
+    # The cancellation must remain pending.
+    assert stored_action.status == "pending"
+
+    assert stored_action.action_type == "cancel_order"
+
+    assert stored_action.confirmed_at is None
+
+    assert stored_action.action_data["action_performed"] is False
+
+    # Step 6: Verify no additional PendingAction
+    # was created in this conversation.
+    actions = db.scalars(
+        select(PendingAction).where(PendingAction.conversation_id == conversation.id)
+    ).all()
+
+    assert len(actions) == 1
+
+    assert actions[0].id == existing_action_id
+
+    # The active action should still be
+    # the original cancellation.
+    service = PendingActionService(db)
+
+    active_action = service.get_pending_action(conversation.id)
+
+    assert active_action is not None
+
+    assert active_action.id == existing_action_id
