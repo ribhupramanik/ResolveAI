@@ -16,6 +16,7 @@ from src.db.models import (
 from src.services.pending_action_service import (
     CONFIRMED,
     EXECUTED,
+    INVALIDATED,
 )
 from src.tools.refund_eligibility import (
     check_refund_eligibility,
@@ -44,6 +45,68 @@ class RefundExecutionService:
     ):
         self.db = db
 
+    def _invalidate_action(
+        self,
+        *,
+        action: PendingAction,
+        order: Order | None,
+        reason: str,
+    ) -> RefundExecutionResult:
+        """
+        Invalidate a confirmed refund action when
+        execution-time validation fails.
+
+        Records the invalidation and its audit
+        within the caller's transaction.
+
+        This method never creates a Refund record
+        and never commits the transaction.
+        """
+
+        order_number = action.target_identifier.strip().upper()
+
+        current_order_status = order.status if order is not None else None
+
+        action.status = INVALIDATED
+        action.action_data = {
+            **dict(action.action_data or {}),
+            "action_performed": False,
+            "current_order_status": current_order_status,
+            "execution_blocked_reason": reason,
+        }
+
+        audit = ActionExecutionAudit(
+            pending_action_id=action.id,
+            conversation_id=action.conversation_id,
+            action_type=action.action_type,
+            target_type=action.target_type,
+            target_identifier=order_number,
+            outcome=INVALIDATED,
+            action_performed=False,
+            previous_target_status=current_order_status,
+            final_target_status=current_order_status,
+            reason=reason,
+            details={
+                "blocked_stage": "execution_revalidation",
+                "order_found": order is not None,
+            },
+        )
+
+        self.db.add(audit)
+
+        self.db.flush()
+
+        return RefundExecutionResult(
+            success=False,
+            executed=False,
+            already_executed=False,
+            action_id=action.id,
+            action_status=action.status,
+            order_number=order_number,
+            order_status=current_order_status,
+            reason=reason,
+        )
+
     def execute(
         self,
         pending_action_id: int,
@@ -65,7 +128,6 @@ class RefundExecutionService:
             .with_for_update()
         )
 
-        # Case 1: PendingAction does not exist.
         if action is None:
             return RefundExecutionResult(
                 success=False,
@@ -80,8 +142,6 @@ class RefundExecutionService:
 
         order_number = action.target_identifier.strip().upper()
 
-        # Case 2: The PendingAction must represent
-        # a refund initiation for an order.
         if action.action_type != "initiate_refund" or action.target_type != "order":
             return RefundExecutionResult(
                 success=False,
@@ -94,8 +154,6 @@ class RefundExecutionService:
                 reason=("Pending action is not an order refund initiation action."),
             )
 
-        # Case 3: Refund execution requires
-        # explicit customer confirmation.
         if action.status != CONFIRMED:
             return RefundExecutionResult(
                 success=False,
@@ -125,8 +183,6 @@ class RefundExecutionService:
                 reason=reason,
             )
 
-        # The confirmed action must still contain the
-        # original eligibility and confirmation evidence.
         if (
             action.confirmed_at is None
             or action_data.get("eligible") is not True
@@ -181,9 +237,14 @@ class RefundExecutionService:
             or eligibility.requires_confirmation is not True
             or eligibility.action_performed is not False
         ):
-            return blocked_result(
-                eligibility.reason or "The order is no longer eligible for a refund.",
-                order_status=order.status,
+            reason = (
+                eligibility.reason or "The order is no longer eligible for a refund."
+            )
+
+            return self._invalidate_action(
+                action=action,
+                order=order,
+                reason=reason,
             )
 
         if (

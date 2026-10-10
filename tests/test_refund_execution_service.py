@@ -332,3 +332,206 @@ def test_confirmed_eligible_refund_creates_processing_refund():
         finally:
             # Never persist test records.
             db.rollback()
+
+
+def test_confirmed_refund_is_invalidated_when_order_ships_before_execution():
+
+    # Safety: use only the test database.
+    assert engine.url.database == "resolveai_test"
+
+    with SessionLocal() as db:
+        try:
+            assert (
+                db.execute(text("SELECT current_database()")).scalar_one()
+                == "resolveai_test"
+            )
+
+            # ----------------------------------
+            # 1. Create an eligible order
+            # ----------------------------------
+
+            token = uuid4().hex
+
+            conversation = Conversation(
+                title="Refund invalidation test",
+            )
+
+            customer = Customer(
+                customer_code=f"TST-RFI-{token[:12]}",
+                name="Refund Invalidation Test",
+                email=f"refund-invalidation-{token}@example.com",
+            )
+
+            db.add_all(
+                [
+                    conversation,
+                    customer,
+                ]
+            )
+
+            db.flush()
+
+            order = Order(
+                order_number=(f"ORD-{uuid4().int % 10**18:018d}"),
+                customer_id=customer.id,
+                status="processing",
+                payment_status="paid",
+                total_amount=Decimal("1299.00"),
+                currency="INR",
+                shipping_address="Test address",
+            )
+
+            db.add(order)
+            db.flush()
+
+            order_id = order.id
+            order_number = order.order_number
+
+            # ----------------------------------
+            # 2. Create the refund PendingAction
+            # ----------------------------------
+
+            pending_service = PendingActionService(db)
+
+            action = pending_service.create_pending_action(
+                conversation_id=conversation.id,
+                action_type="initiate_refund",
+                target_type="order",
+                target_identifier=order_number,
+                action_data={
+                    "order_status": "processing",
+                    "payment_status": "paid",
+                    "refund_amount": "1299.00",
+                    "currency": "INR",
+                    "eligible": True,
+                    "requires_confirmation": True,
+                    "action_performed": False,
+                },
+            )
+
+            action_id = action.id
+
+            # ----------------------------------
+            # 3. Confirm the refund
+            # ----------------------------------
+
+            confirmed = pending_service.confirm_pending_action(conversation.id)
+
+            assert confirmed is not None
+            assert confirmed.status == "confirmed"
+            assert confirmed.confirmed_at is not None
+
+            # ----------------------------------
+            # 4. Simulate the order being shipped
+            # ----------------------------------
+
+            # The order was processing when eligibility
+            # was originally checked.
+            #
+            # It has now shipped BEFORE refund execution.
+
+            order.status = "shipped"
+
+            db.flush()
+
+            # ----------------------------------
+            # 5. Attempt refund execution
+            # ----------------------------------
+
+            from src.services.refund_execution_service import (
+                RefundExecutionService,
+            )
+
+            result = RefundExecutionService(db).execute(action_id)
+
+            # The refund must not execute.
+            assert result.success is False
+            assert result.executed is False
+            assert result.already_executed is False
+
+            assert result.action_id == action_id
+            assert result.order_number == order_number
+            assert result.order_status == "shipped"
+
+            # IMPORTANT:
+            # The confirmed action must now be invalidated.
+            assert result.action_status == "invalidated"
+
+            assert "shipped" in result.reason.lower()
+
+            # ----------------------------------
+            # 6. Reload database state
+            # ----------------------------------
+
+            db.flush()
+            db.expire_all()
+
+            stored_action = db.get(
+                PendingAction,
+                action_id,
+            )
+
+            stored_order = db.get(
+                Order,
+                order_id,
+            )
+
+            # The order remains shipped.
+            assert stored_order is not None
+            assert stored_order.status == "shipped"
+            assert stored_order.payment_status == "paid"
+
+            # The PendingAction records invalidation.
+            assert stored_action is not None
+            assert stored_action.status == "invalidated"
+
+            # Confirmation genuinely happened earlier.
+            assert stored_action.confirmed_at is not None
+
+            # But no refund was performed.
+            assert stored_action.action_data["action_performed"] is False
+
+            # The invalidation reason should be stored.
+            assert (
+                "shipped"
+                in stored_action.action_data["execution_blocked_reason"].lower()
+            )
+
+            # ----------------------------------
+            # 7. Verify no Refund was created
+            # ----------------------------------
+
+            refunds = db.scalars(
+                select(Refund).where(Refund.order_id == order_id)
+            ).all()
+
+            assert refunds == []
+
+            # ----------------------------------
+            # 8. Verify execution audit
+            # ----------------------------------
+
+            audit = db.scalar(
+                select(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id == action_id
+                )
+            )
+
+            assert audit is not None
+
+            assert audit.outcome == "invalidated"
+            assert audit.action_performed is False
+
+            assert audit.action_type == "initiate_refund"
+            assert audit.target_type == "order"
+
+            assert audit.target_identifier == order_number
+
+            assert audit.previous_target_status == "shipped"
+            assert audit.final_target_status == "shipped"
+
+            assert "shipped" in audit.reason.lower()
+
+        finally:
+            # Roll back all test data.
+            db.rollback()
