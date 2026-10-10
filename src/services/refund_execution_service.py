@@ -1,12 +1,24 @@
+import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.db.models import PendingAction
-
+from src.db.models import (
+    ActionExecutionAudit,
+    Order,
+    PendingAction,
+    Refund,
+)
 from src.services.pending_action_service import (
     CONFIRMED,
+    EXECUTED,
+)
+from src.tools.refund_eligibility import (
+    check_refund_eligibility,
 )
 
 
@@ -26,7 +38,6 @@ class RefundExecutionResult:
 
 
 class RefundExecutionService:
-
     def __init__(
         self,
         db: Session,
@@ -50,9 +61,7 @@ class RefundExecutionService:
         # its current state.
         action = self.db.scalar(
             select(PendingAction)
-            .where(
-                PendingAction.id == pending_action_id
-            )
+            .where(PendingAction.id == pending_action_id)
             .with_for_update()
         )
 
@@ -69,16 +78,11 @@ class RefundExecutionService:
                 reason="Pending action not found.",
             )
 
-        order_number = (
-            action.target_identifier.strip().upper()
-        )
+        order_number = action.target_identifier.strip().upper()
 
         # Case 2: The PendingAction must represent
         # a refund initiation for an order.
-        if (
-            action.action_type != "initiate_refund"
-            or action.target_type != "order"
-        ):
+        if action.action_type != "initiate_refund" or action.target_type != "order":
             return RefundExecutionResult(
                 success=False,
                 executed=False,
@@ -87,10 +91,7 @@ class RefundExecutionService:
                 action_status=action.status,
                 order_number=order_number,
                 order_status=None,
-                reason=(
-                    "Pending action is not an "
-                    "order refund initiation action."
-                ),
+                reason=("Pending action is not an order refund initiation action."),
             )
 
         # Case 3: Refund execution requires
@@ -107,18 +108,167 @@ class RefundExecutionService:
                 reason="Refund has not been confirmed.",
             )
 
-        # Actual refund execution will be implemented
-        # in subsequent Stage 4C5 steps.
-        #
-        # For now, even confirmed refunds must
-        # fail safely without changing the database.
+        action_data = dict(action.action_data or {})
+
+        def blocked_result(
+            reason: str,
+            order_status: str | None = None,
+        ) -> RefundExecutionResult:
+            return RefundExecutionResult(
+                success=False,
+                executed=False,
+                already_executed=False,
+                action_id=action.id,
+                action_status=action.status,
+                order_number=order_number,
+                order_status=order_status,
+                reason=reason,
+            )
+
+        # The confirmed action must still contain the
+        # original eligibility and confirmation evidence.
+        if (
+            action.confirmed_at is None
+            or action_data.get("eligible") is not True
+            or action_data.get("requires_confirmation") is not True
+            or action_data.get("action_performed") is not False
+        ):
+            return blocked_result(
+                "Refund action has invalid confirmation or eligibility data."
+            )
+
+        raw_amount = action_data.get("refund_amount")
+        raw_currency = action_data.get("currency")
+
+        if not isinstance(raw_amount, str) or not re.fullmatch(
+            r"(?:0|[1-9]\d*)(?:\.\d{1,2})?",
+            raw_amount,
+        ):
+            return blocked_result("Refund action contains an invalid amount.")
+
+        try:
+            snapshot_amount = Decimal(raw_amount)
+
+        except InvalidOperation:
+            return blocked_result("Refund action contains an invalid amount.")
+
+        if not snapshot_amount.is_finite() or snapshot_amount <= 0:
+            return blocked_result("Refund action contains an invalid amount.")
+
+        if not isinstance(raw_currency, str) or not re.fullmatch(
+            r"[A-Z]{3}",
+            raw_currency,
+        ):
+            return blocked_result("Refund action contains an invalid currency.")
+
+        snapshot_currency = raw_currency
+
+        order = self.db.scalar(
+            select(Order).where(Order.order_number == order_number).with_for_update()
+        )
+
+        if order is None:
+            return blocked_result("The target order no longer exists.")
+
+        eligibility = check_refund_eligibility(
+            db=self.db,
+            order_number=order_number,
+        )
+
+        if (
+            eligibility.found is not True
+            or eligibility.eligible is not True
+            or eligibility.requires_confirmation is not True
+            or eligibility.action_performed is not False
+        ):
+            return blocked_result(
+                eligibility.reason or "The order is no longer eligible for a refund.",
+                order_status=order.status,
+            )
+
+        if (
+            eligibility.refund_amount is None
+            or snapshot_amount != order.total_amount
+            or snapshot_amount != eligibility.refund_amount
+        ):
+            return blocked_result(
+                "Refund amount no longer matches the order.",
+                order_status=order.status,
+            )
+
+        current_currency = order.currency.strip().upper()
+
+        if (
+            snapshot_currency != current_currency
+            or eligibility.currency is None
+            or snapshot_currency != eligibility.currency.strip().upper()
+        ):
+            return blocked_result(
+                "Refund currency no longer matches the order.",
+                order_status=order.status,
+            )
+
+        initiated_at = datetime.now(UTC)
+
+        refund = Refund(
+            refund_number=f"REF-{uuid4().hex.upper()}",
+            order_id=order.id,
+            status="processing",
+            amount=snapshot_amount,
+            currency=snapshot_currency,
+            initiated_at=initiated_at,
+            completed_at=None,
+            failure_reason=None,
+        )
+
+        self.db.add(refund)
+
+        self.db.flush()
+
+        action.status = EXECUTED
+
+        action.action_data = {
+            **action_data,
+            "action_performed": True,
+            "refund_id": refund.id,
+            "refund_number": refund.refund_number,
+            "executed_at": initiated_at.isoformat(),
+        }
+
+        success_reason = "Refund initiation recorded successfully."
+
+        audit = ActionExecutionAudit(
+            pending_action_id=action.id,
+            conversation_id=action.conversation_id,
+            action_type=action.action_type,
+            target_type=action.target_type,
+            target_identifier=order_number,
+            outcome=EXECUTED,
+            action_performed=True,
+            previous_target_status=order.status,
+            final_target_status=order.status,
+            reason=success_reason,
+            details={
+                "refund_id": refund.id,
+                "refund_number": refund.refund_number,
+                "refund_amount": str(refund.amount),
+                "currency": refund.currency,
+                "refund_status": "processing",
+                "initiated_at": initiated_at.isoformat(),
+            },
+        )
+
+        self.db.add(audit)
+
+        self.db.flush()
+
         return RefundExecutionResult(
-            success=False,
-            executed=False,
+            success=True,
+            executed=True,
             already_executed=False,
             action_id=action.id,
             action_status=action.status,
-            order_number=order_number,
-            order_status=None,
-            reason="Refund execution is not implemented yet.",
+            order_number=order.order_number,
+            order_status=order.status,
+            reason=success_reason,
         )
