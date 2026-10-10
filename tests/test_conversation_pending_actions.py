@@ -2232,3 +2232,123 @@ def test_cancellation_execution_endpoints_reject_refund_actions(
     assert messages_response.status_code == 200
 
     assert messages_response.json() == []
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        "ineligible",
+        "tool_failed",
+        "refund_status",
+        "fallback",
+    ],
+)
+def test_non_actionable_refund_results_do_not_create_pending_action(
+    app,
+    db,
+    conversation,
+    scenario,
+):
+    # A valid refund eligibility result.
+    # We'll modify it for each negative scenario.
+    eligible_data = {
+        "found": True,
+        "order_number": "ORD-10002",
+        "status": "processing",
+        "payment_status": "paid",
+        "eligible": True,
+        "reason": "The order is eligible for a full refund.",
+        "refund_amount": "1299.00",
+        "currency": "INR",
+        "requires_confirmation": True,
+        "action_performed": False,
+    }
+
+    # Configure the fake RAG pipeline
+    # according to the scenario being tested.
+    if scenario == "ineligible":
+        pipeline_config = {
+            "tool_used": True,
+            "tool_name": "check_refund_eligibility",
+            "tool_success": True,
+            "tool_data": {
+                **eligible_data,
+                "eligible": False,
+                "requires_confirmation": False,
+            },
+        }
+
+    elif scenario == "tool_failed":
+        pipeline_config = {
+            "tool_used": True,
+            "tool_name": "check_refund_eligibility",
+            "tool_success": False,
+            "tool_data": eligible_data,
+        }
+
+    elif scenario == "refund_status":
+        pipeline_config = {
+            "tool_used": True,
+            "tool_name": "get_refund_status",
+            "tool_success": True,
+            "tool_data": {
+                "order_number": "ORD-10002",
+                "refund_number": "REF-10002",
+                "status": "processing",
+                "amount": "1299.00",
+                "currency": "INR",
+            },
+        }
+
+    elif scenario == "fallback":
+        pipeline_config = {
+            "tool_used": True,
+            "tool_name": "check_refund_eligibility",
+            "tool_success": True,
+            "tool_data": eligible_data,
+            "used_fallback": True,
+        }
+
+    refund_pipeline = CountingFakePipeline(
+        **pipeline_config,
+    )
+
+    app.dependency_overrides[get_pipeline] = lambda: refund_pipeline
+
+    client = TestClient(app)
+
+    # Send the message through the actual API.
+    response = client.post(
+        f"/api/v1/conversations/{conversation.id}/messages",
+        json={
+            "message": "Check refund for ORD-10002",
+        },
+    )
+
+    # The application must process the request.
+    assert response.status_code == 201
+
+    # The RAG pipeline must run exactly once.
+    assert refund_pipeline.run_calls == 1
+
+    data = response.json()
+
+    # None of these scenarios should create
+    # a new refund PendingAction.
+    assert data["pending_action"] is None
+
+    # Verify the database contains no active action.
+    service = PendingActionService(db)
+
+    stored_action = service.get_pending_action(conversation.id)
+
+    assert stored_action is None
+
+    # Verify the API also reports no active action.
+    pending_response = client.get(
+        f"/api/v1/conversations/{conversation.id}/pending-action"
+    )
+
+    assert pending_response.status_code == 200
+
+    assert pending_response.json() is None
