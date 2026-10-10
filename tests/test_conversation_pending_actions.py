@@ -18,6 +18,7 @@ from src.db.models import (
     Customer,
     Order,
     PendingAction,
+    Refund,
 )
 from src.rag.pipeline import RAGResult
 from src.services.pending_action_service import (
@@ -1637,3 +1638,116 @@ def test_multi_tool_executions_are_returned_and_persisted(
             "tool_name",
             "success",
         }
+
+
+def test_chat_refund_confirmation_does_not_execute_cancellation(
+    client,
+    db,
+    execution_case_factory,
+    fake_pipeline,
+    monkeypatch,
+):
+    # Create a real test order, conversation,
+    # and pending action in resolveai_test.
+    case = execution_case_factory(
+        action_status="pending",
+    )
+
+    order = case["order"]
+    conversation = case["conversation"]
+    action = case["action"]
+
+    order_id = order.id
+    action_id = action.id
+
+    # Convert the test PendingAction into
+    # a refund initiation request.
+    action.action_type = "initiate_refund"
+
+    action.action_data = {
+        "order_status": "processing",
+        "payment_status": "paid",
+        "refund_amount": "999.00",
+        "currency": "INR",
+        "eligible": True,
+        "requires_confirmation": True,
+        "action_performed": False,
+    }
+
+    db.commit()
+
+    # The cancellation service must never
+    # receive a refund action.
+    def forbidden_cancellation_execution(*args, **kwargs):
+        raise AssertionError(
+            "CancellationExecutionService must not "
+            "be called for refund initiation."
+        )
+
+    monkeypatch.setattr(
+        conversations,
+        "CancellationExecutionService",
+        forbidden_cancellation_execution,
+    )
+
+    # Customer attempts to confirm the refund.
+    response = client.post(
+        f"/api/v1/conversations/"
+        f"{conversation.id}/messages",
+        json={
+            "message": "yes",
+        },
+    )
+
+    # Refund execution is not implemented yet.
+    assert response.status_code == 409
+
+    assert response.json() == {
+        "detail": "Refund execution is not available yet.",
+    }
+
+    db.expire_all()
+
+    stored_order = db.get(
+        Order,
+        order_id,
+    )
+
+    stored_action = db.get(
+        PendingAction,
+        action_id,
+    )
+
+    # No cancellation occurred.
+    assert stored_order.status == "processing"
+
+    # The refund request remains pending.
+    assert stored_action.status == "pending"
+    assert stored_action.confirmed_at is None
+
+    assert (
+        stored_action.action_data["action_performed"]
+        is False
+    )
+
+    # No refund record was created.
+    refund = db.scalar(
+        select(Refund).where(
+            Refund.order_id == order_id
+        )
+    )
+
+    assert refund is None
+
+    # No execution audit was created.
+    audit = db.scalar(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id
+            == action_id
+        )
+    )
+
+    assert audit is None
+
+    # Confirmation handling should not invoke RAG.
+    assert fake_pipeline.run_calls == 0

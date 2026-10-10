@@ -639,14 +639,25 @@ def send_message(
                 raise RuntimeError("Handled pending action has no action.")
 
             if pending_decision.decision == "confirmed":
-                # resolve_pending_action_response() has already
-                # changed the action from pending -> confirmed,
-                # but it has NOT committed.
-                #
-                # Execute inside this same transaction so the
-                # confirmation, cancellation, audit, user
-                # message, and assistant message either all
-                # commit together or all roll back together.
+                if (
+                    action.action_type != "cancel_order"
+                    or action.target_type != "order"
+                ):
+                    if (
+                        action.action_type == "initiate_refund"
+                        and action.target_type == "order"
+                    ):
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail="Refund execution is not available yet.",
+                        )
+
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Pending action cannot be executed through chat.",
+                    )
+
+                # Existing cancellation execution logic.
                 execution_result = CancellationExecutionService(db).execute(action.id)
 
                 should_commit = (
@@ -826,12 +837,16 @@ def send_message(
         db.refresh(user_message)
         db.refresh(assistant_message)
 
+    except HTTPException:
+        db.rollback()
+        raise
+
     except Exception as exc:
         db.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=("ResolveAI could not process the request."),
+            detail="ResolveAI could not process the request.",
         ) from exc
 
     metadata = ChatMetadata(
