@@ -1,5 +1,7 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from decimal import Decimal
+from threading import Barrier
 from uuid import uuid4
 
 import pytest
@@ -2234,6 +2236,629 @@ def test_refund_execution_is_idempotent_after_commit_in_new_session():
 
                 db.execute(
                     delete(Conversation).where(Conversation.id == conversation_id)
+                )
+
+                db.execute(delete(Customer).where(Customer.id == customer_id))
+
+                db.commit()
+
+
+def test_executed_refund_fails_safely_when_refund_record_is_missing():
+    assert engine.url.database == "resolveai_test"
+
+    with SessionLocal() as db:
+        try:
+            assert (
+                db.execute(text("SELECT current_database()")).scalar_one()
+                == "resolveai_test"
+            )
+
+            token = uuid4().hex
+
+            conversation = Conversation(
+                title="Missing executed refund test",
+            )
+
+            customer = Customer(
+                customer_code=f"TST-RFM-{token[:12]}",
+                name="Missing Refund Test",
+                email=f"missing-refund-{token}@example.com",
+            )
+
+            db.add_all([conversation, customer])
+            db.flush()
+
+            order = Order(
+                order_number=f"ORD-{uuid4().int % 10**18:018d}",
+                customer_id=customer.id,
+                status="processing",
+                payment_status="paid",
+                total_amount=Decimal("1299.00"),
+                currency="INR",
+                shipping_address="Test address",
+            )
+
+            db.add(order)
+            db.flush()
+
+            order_id = order.id
+            order_number = order.order_number
+
+            pending_service = PendingActionService(db)
+
+            action = pending_service.create_pending_action(
+                conversation_id=conversation.id,
+                action_type="initiate_refund",
+                target_type="order",
+                target_identifier=order_number,
+                action_data={
+                    "order_status": "processing",
+                    "payment_status": "paid",
+                    "refund_amount": "1299.00",
+                    "currency": "INR",
+                    "eligible": True,
+                    "requires_confirmation": True,
+                    "action_performed": False,
+                },
+            )
+
+            action_id = action.id
+
+            confirmed = pending_service.confirm_pending_action(conversation.id)
+
+            assert confirmed is not None
+            assert confirmed.status == "confirmed"
+
+            from src.services.refund_execution_service import (
+                RefundExecutionService,
+            )
+
+            execution_service = RefundExecutionService(db)
+
+            first_result = execution_service.execute(action_id)
+
+            assert first_result.success is True
+            assert first_result.executed is True
+            assert first_result.already_executed is False
+
+            db.flush()
+
+            refunds = db.scalars(
+                select(Refund).where(Refund.order_id == order_id)
+            ).all()
+
+            assert len(refunds) == 1
+
+            original_refund = refunds[0]
+            original_refund_id = original_refund.id
+
+            stored_action = db.get(PendingAction, action_id)
+
+            assert stored_action is not None
+            assert stored_action.status == "executed"
+
+            original_action_data = dict(stored_action.action_data)
+
+            original_audit = db.scalar(
+                select(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id == action_id
+                )
+            )
+
+            assert original_audit is not None
+
+            original_audit_id = original_audit.id
+
+            db.delete(original_refund)
+            db.flush()
+            db.expire_all()
+
+            assert db.get(Refund, original_refund_id) is None
+
+            second_result = execution_service.execute(action_id)
+
+            assert second_result.success is False
+            assert second_result.executed is False
+            assert second_result.already_executed is False
+
+            assert second_result.action_id == action_id
+            assert second_result.action_status == "executed"
+
+            assert second_result.order_number == order_number
+            assert second_result.order_status == "processing"
+
+            assert second_result.reason == (
+                "Previously executed refund action has inconsistent records."
+            )
+
+            db.flush()
+            db.expire_all()
+
+            stored_action = db.get(
+                PendingAction,
+                action_id,
+            )
+
+            assert stored_action is not None
+            assert stored_action.status == "executed"
+
+            assert stored_action.action_data == original_action_data
+
+            assert stored_action.action_data["refund_id"] == original_refund_id
+
+            refund_count = db.scalar(
+                select(func.count(Refund.id)).where(Refund.order_id == order_id)
+            )
+
+            assert refund_count == 0
+
+            audits = db.scalars(
+                select(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id == action_id
+                )
+            ).all()
+
+            assert len(audits) == 1
+
+            assert audits[0].id == original_audit_id
+            assert audits[0].outcome == "executed"
+
+        finally:
+            db.rollback()
+
+
+def test_executed_refund_fails_safely_when_audit_refund_id_is_inconsistent():
+    assert engine.url.database == "resolveai_test"
+
+    with SessionLocal() as db:
+        try:
+            assert (
+                db.execute(text("SELECT current_database()")).scalar_one()
+                == "resolveai_test"
+            )
+
+            token = uuid4().hex
+
+            conversation = Conversation(
+                title="Inconsistent refund audit test",
+            )
+
+            customer = Customer(
+                customer_code=f"TST-RIA-{token[:12]}",
+                name="Refund Audit Integrity Test",
+                email=f"refund-audit-integrity-{token}@example.com",
+            )
+
+            db.add_all([conversation, customer])
+            db.flush()
+
+            order = Order(
+                order_number=f"ORD-{uuid4().int % 10**18:018d}",
+                customer_id=customer.id,
+                status="processing",
+                payment_status="paid",
+                total_amount=Decimal("1299.00"),
+                currency="INR",
+                shipping_address="Test address",
+            )
+
+            db.add(order)
+            db.flush()
+
+            order_id = order.id
+            order_number = order.order_number
+
+            pending_service = PendingActionService(db)
+
+            action = pending_service.create_pending_action(
+                conversation_id=conversation.id,
+                action_type="initiate_refund",
+                target_type="order",
+                target_identifier=order_number,
+                action_data={
+                    "order_status": "processing",
+                    "payment_status": "paid",
+                    "refund_amount": "1299.00",
+                    "currency": "INR",
+                    "eligible": True,
+                    "requires_confirmation": True,
+                    "action_performed": False,
+                },
+            )
+
+            action_id = action.id
+
+            confirmed = pending_service.confirm_pending_action(conversation.id)
+
+            assert confirmed is not None
+            assert confirmed.status == "confirmed"
+            assert confirmed.confirmed_at is not None
+
+            from src.services.refund_execution_service import (
+                RefundExecutionService,
+            )
+
+            execution_service = RefundExecutionService(db)
+
+            first_result = execution_service.execute(action_id)
+
+            assert first_result.success is True
+            assert first_result.executed is True
+            assert first_result.already_executed is False
+
+            db.flush()
+
+            refunds = db.scalars(
+                select(Refund).where(Refund.order_id == order_id)
+            ).all()
+
+            assert len(refunds) == 1
+
+            original_refund = refunds[0]
+            original_refund_id = original_refund.id
+            original_refund_number = original_refund.refund_number
+
+            stored_action = db.get(
+                PendingAction,
+                action_id,
+            )
+
+            assert stored_action is not None
+            assert stored_action.status == "executed"
+
+            original_action_data = dict(stored_action.action_data)
+
+            audit = db.scalar(
+                select(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id == action_id
+                )
+            )
+
+            assert audit is not None
+            assert audit.outcome == "executed"
+            assert audit.action_performed is True
+            assert audit.details["refund_id"] == original_refund_id
+
+            original_audit_id = audit.id
+
+            incorrect_refund_id = original_refund_id + 1
+
+            audit.details = {
+                **audit.details,
+                "refund_id": incorrect_refund_id,
+            }
+
+            db.flush()
+            db.expire_all()
+
+            second_result = execution_service.execute(action_id)
+
+            assert second_result.success is False
+            assert second_result.executed is False
+            assert second_result.already_executed is False
+
+            assert second_result.action_id == action_id
+            assert second_result.action_status == "executed"
+            assert second_result.order_number == order_number
+            assert second_result.order_status == "processing"
+
+            assert second_result.reason == (
+                "Previously executed refund action has inconsistent records."
+            )
+
+            db.flush()
+            db.expire_all()
+
+            stored_action = db.get(
+                PendingAction,
+                action_id,
+            )
+
+            assert stored_action is not None
+            assert stored_action.status == "executed"
+            assert stored_action.action_data == original_action_data
+
+            refunds_after = db.scalars(
+                select(Refund).where(Refund.order_id == order_id)
+            ).all()
+
+            assert len(refunds_after) == 1
+
+            stored_refund = refunds_after[0]
+
+            assert stored_refund.id == original_refund_id
+            assert stored_refund.refund_number == original_refund_number
+            assert stored_refund.status == "processing"
+            assert stored_refund.amount == Decimal("1299.00")
+            assert stored_refund.currency == "INR"
+
+            audits = db.scalars(
+                select(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id == action_id
+                )
+            ).all()
+
+            assert len(audits) == 1
+
+            stored_audit = audits[0]
+
+            assert stored_audit.id == original_audit_id
+            assert stored_audit.outcome == "executed"
+            assert stored_audit.action_performed is True
+
+            assert stored_audit.details["refund_id"] == incorrect_refund_id
+
+            assert stored_audit.details["refund_number"] == original_refund_number
+
+        finally:
+            db.rollback()
+
+
+def test_concurrent_refund_actions_for_same_order_create_one_refund():
+    assert engine.url.database == "resolveai_test"
+
+    token = uuid4().hex
+
+    conversation_ids = []
+    action_ids = []
+
+    customer_id = None
+    order_id = None
+    order_number = None
+
+    setup_committed = False
+
+    try:
+        with SessionLocal() as db:
+            assert (
+                db.execute(text("SELECT current_database()")).scalar_one()
+                == "resolveai_test"
+            )
+
+            customer = Customer(
+                customer_code=f"TST-RCC-{token[:12]}",
+                name="Concurrent Refund Test",
+                email=f"concurrent-refund-{token}@example.com",
+            )
+
+            conversation_a = Conversation(
+                title="Concurrent refund conversation A",
+            )
+
+            conversation_b = Conversation(
+                title="Concurrent refund conversation B",
+            )
+
+            db.add_all(
+                [
+                    customer,
+                    conversation_a,
+                    conversation_b,
+                ]
+            )
+
+            db.flush()
+
+            customer_id = customer.id
+
+            conversation_ids = [
+                conversation_a.id,
+                conversation_b.id,
+            ]
+
+            order = Order(
+                order_number=f"ORD-{uuid4().int % 10**18:018d}",
+                customer_id=customer_id,
+                status="processing",
+                payment_status="paid",
+                total_amount=Decimal("1299.00"),
+                currency="INR",
+                shipping_address="Test address",
+            )
+
+            db.add(order)
+            db.flush()
+
+            order_id = order.id
+            order_number = order.order_number
+
+            pending_service = PendingActionService(db)
+
+            for conversation_id in conversation_ids:
+                action = pending_service.create_pending_action(
+                    conversation_id=conversation_id,
+                    action_type="initiate_refund",
+                    target_type="order",
+                    target_identifier=order_number,
+                    action_data={
+                        "order_status": "processing",
+                        "payment_status": "paid",
+                        "refund_amount": "1299.00",
+                        "currency": "INR",
+                        "eligible": True,
+                        "requires_confirmation": True,
+                        "action_performed": False,
+                    },
+                )
+
+                action_ids.append(action.id)
+
+                confirmed = pending_service.confirm_pending_action(conversation_id)
+
+                assert confirmed is not None
+                assert confirmed.id == action.id
+                assert confirmed.status == "confirmed"
+                assert confirmed.confirmed_at is not None
+
+            assert len(action_ids) == 2
+            assert action_ids[0] != action_ids[1]
+
+            db.commit()
+            setup_committed = True
+
+        barrier = Barrier(2)
+
+        def execute_refund_in_separate_session(action_id):
+            with SessionLocal() as db:
+                assert (
+                    db.execute(text("SELECT current_database()")).scalar_one()
+                    == "resolveai_test"
+                )
+
+                from src.services.refund_execution_service import (
+                    RefundExecutionService,
+                )
+
+                barrier.wait(timeout=20)
+
+                result = RefundExecutionService(db).execute(action_id)
+
+                db.commit()
+
+                return result
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(
+                    execute_refund_in_separate_session,
+                    action_id,
+                )
+                for action_id in action_ids
+            ]
+
+            results = [future.result(timeout=60) for future in futures]
+
+        assert len(results) == 2
+
+        successful_results = [result for result in results if result.success is True]
+
+        invalidated_results = [
+            result for result in results if result.action_status == "invalidated"
+        ]
+
+        assert len(successful_results) == 1
+        assert len(invalidated_results) == 1
+
+        successful_result = successful_results[0]
+        invalidated_result = invalidated_results[0]
+
+        assert successful_result.executed is True
+        assert successful_result.already_executed is False
+        assert successful_result.action_status == "executed"
+
+        assert invalidated_result.success is False
+        assert invalidated_result.executed is False
+        assert invalidated_result.already_executed is False
+
+        assert (
+            invalidated_result.reason
+            == "A refund is already being processed for this order."
+        )
+
+        assert successful_result.action_id != invalidated_result.action_id
+
+        with SessionLocal() as db:
+            assert (
+                db.execute(text("SELECT current_database()")).scalar_one()
+                == "resolveai_test"
+            )
+
+            stored_order = db.get(Order, order_id)
+
+            assert stored_order is not None
+            assert stored_order.status == "processing"
+            assert stored_order.payment_status == "paid"
+            assert stored_order.total_amount == Decimal("1299.00")
+            assert stored_order.currency == "INR"
+
+            actions = db.scalars(
+                select(PendingAction).where(PendingAction.id.in_(action_ids))
+            ).all()
+
+            assert len(actions) == 2
+
+            action_by_id = {action.id: action for action in actions}
+
+            executed_action = action_by_id[successful_result.action_id]
+
+            invalidated_action = action_by_id[invalidated_result.action_id]
+
+            assert executed_action.status == "executed"
+            assert executed_action.confirmed_at is not None
+
+            assert executed_action.action_data["action_performed"] is True
+
+            assert invalidated_action.status == "invalidated"
+            assert invalidated_action.confirmed_at is not None
+
+            assert invalidated_action.action_data["action_performed"] is False
+
+            refunds = db.scalars(
+                select(Refund).where(Refund.order_id == order_id)
+            ).all()
+
+            assert len(refunds) == 1
+
+            refund = refunds[0]
+
+            assert refund.status == "processing"
+            assert refund.amount == Decimal("1299.00")
+            assert refund.currency == "INR"
+
+            assert executed_action.action_data["refund_id"] == refund.id
+
+            assert executed_action.action_data["refund_number"] == refund.refund_number
+
+            audits = db.scalars(
+                select(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id.in_(action_ids)
+                )
+            ).all()
+
+            assert len(audits) == 2
+
+            audit_by_action_id = {audit.pending_action_id: audit for audit in audits}
+
+            executed_audit = audit_by_action_id[successful_result.action_id]
+
+            invalidated_audit = audit_by_action_id[invalidated_result.action_id]
+
+            assert executed_audit.outcome == "executed"
+            assert executed_audit.action_performed is True
+
+            assert executed_audit.details["refund_id"] == refund.id
+
+            assert executed_audit.details["refund_number"] == refund.refund_number
+
+            assert invalidated_audit.outcome == "invalidated"
+            assert invalidated_audit.action_performed is False
+
+            assert (
+                invalidated_audit.reason
+                == "A refund is already being processed for this order."
+            )
+
+            db.rollback()
+
+    finally:
+        if setup_committed:
+            with SessionLocal() as db:
+                db.execute(
+                    delete(ActionExecutionAudit).where(
+                        ActionExecutionAudit.pending_action_id.in_(action_ids)
+                    )
+                )
+
+                db.execute(delete(Refund).where(Refund.order_id == order_id))
+
+                db.execute(
+                    delete(PendingAction).where(PendingAction.id.in_(action_ids))
+                )
+
+                db.execute(delete(Order).where(Order.id == order_id))
+
+                db.execute(
+                    delete(Conversation).where(Conversation.id.in_(conversation_ids))
                 )
 
                 db.execute(delete(Customer).where(Customer.id == customer_id))
