@@ -1595,3 +1595,478 @@ def test_confirmed_refund_is_invalidated_when_order_currency_changes():
         finally:
             # Never persist test records.
             db.rollback()
+
+
+def test_refund_execution_changes_roll_back_atomically():
+
+    # ------------------------------------------
+    # 1. Verify the test database
+    # ------------------------------------------
+
+    assert engine.url.database == "resolveai_test"
+
+    with SessionLocal() as db:
+        try:
+            assert (
+                db.execute(text("SELECT current_database()")).scalar_one()
+                == "resolveai_test"
+            )
+
+            # ------------------------------------------
+            # 2. Create an eligible order
+            # ------------------------------------------
+
+            token = uuid4().hex
+
+            conversation = Conversation(
+                title="Refund transaction rollback test",
+            )
+
+            customer = Customer(
+                customer_code=f"TST-RFT-{token[:12]}",
+                name="Refund Transaction Test",
+                email=f"refund-transaction-{token}@example.com",
+            )
+
+            db.add_all([conversation, customer])
+            db.flush()
+
+            order = Order(
+                order_number=f"ORD-{uuid4().int % 10**18:018d}",
+                customer_id=customer.id,
+                status="processing",
+                payment_status="paid",
+                total_amount=Decimal("1299.00"),
+                currency="INR",
+                shipping_address="Test address",
+            )
+
+            db.add(order)
+            db.flush()
+
+            order_id = order.id
+            order_number = order.order_number
+
+            # ------------------------------------------
+            # 3. Create and confirm the PendingAction
+            # ------------------------------------------
+
+            pending_service = PendingActionService(db)
+
+            action = pending_service.create_pending_action(
+                conversation_id=conversation.id,
+                action_type="initiate_refund",
+                target_type="order",
+                target_identifier=order_number,
+                action_data={
+                    "order_status": "processing",
+                    "payment_status": "paid",
+                    "refund_amount": "1299.00",
+                    "currency": "INR",
+                    "eligible": True,
+                    "requires_confirmation": True,
+                    "action_performed": False,
+                },
+            )
+
+            action_id = action.id
+
+            confirmed = pending_service.confirm_pending_action(conversation.id)
+
+            assert confirmed is not None
+            assert confirmed.status == "confirmed"
+            assert confirmed.confirmed_at is not None
+
+            # Flush the confirmed state BEFORE
+            # starting the savepoint.
+            db.flush()
+
+            # ------------------------------------------
+            # 4. Create a PostgreSQL SAVEPOINT
+            # ------------------------------------------
+
+            # The confirmed PendingAction is now part
+            # of the outer transaction.
+            #
+            # Only changes made AFTER this savepoint
+            # should be rolled back.
+
+            savepoint = db.begin_nested()
+
+            try:
+                # --------------------------------------
+                # 5. Execute the refund
+                # --------------------------------------
+
+                from src.services.refund_execution_service import (
+                    RefundExecutionService,
+                )
+
+                result = RefundExecutionService(db).execute(action_id)
+
+                assert result.success is True
+                assert result.executed is True
+                assert result.already_executed is False
+                assert result.action_status == "executed"
+
+                db.flush()
+
+                # --------------------------------------
+                # 6. Verify execution changes exist
+                # --------------------------------------
+
+                executed_action = db.get(
+                    PendingAction,
+                    action_id,
+                )
+
+                assert executed_action is not None
+                assert executed_action.status == "executed"
+
+                assert executed_action.action_data["action_performed"] is True
+
+                refund_count = db.scalar(
+                    select(func.count(Refund.id)).where(Refund.order_id == order_id)
+                )
+
+                assert refund_count == 1
+
+                audit = db.scalar(
+                    select(ActionExecutionAudit).where(
+                        ActionExecutionAudit.pending_action_id == action_id
+                    )
+                )
+
+                assert audit is not None
+                assert audit.outcome == "executed"
+                assert audit.action_performed is True
+
+            finally:
+                # --------------------------------------
+                # 7. Roll back the SAVEPOINT
+                # --------------------------------------
+
+                # This must undo:
+                # - Refund INSERT
+                # - PendingAction UPDATE
+                # - ActionExecutionAudit INSERT
+
+                savepoint.rollback()
+
+            # ------------------------------------------
+            # 8. Reload database state after rollback
+            # ------------------------------------------
+
+            db.expire_all()
+
+            stored_order = db.get(
+                Order,
+                order_id,
+            )
+
+            stored_action = db.get(
+                PendingAction,
+                action_id,
+            )
+
+            # The order must remain unchanged.
+            assert stored_order is not None
+            assert stored_order.status == "processing"
+            assert stored_order.payment_status == "paid"
+
+            assert stored_order.total_amount == Decimal("1299.00")
+
+            assert stored_order.currency == "INR"
+
+            # ------------------------------------------
+            # 9. Verify PendingAction was restored
+            # ------------------------------------------
+
+            assert stored_action is not None
+
+            # The confirmation happened before
+            # the savepoint and must remain intact.
+            assert stored_action.status == "confirmed"
+            assert stored_action.confirmed_at is not None
+
+            assert stored_action.action_data["action_performed"] is False
+
+            assert stored_action.action_data["refund_amount"] == "1299.00"
+
+            # There must be no execution metadata.
+            assert "refund_id" not in stored_action.action_data
+
+            assert "refund_number" not in stored_action.action_data
+
+            # ------------------------------------------
+            # 10. Verify Refund was rolled back
+            # ------------------------------------------
+
+            refund_count = db.scalar(
+                select(func.count(Refund.id)).where(Refund.order_id == order_id)
+            )
+
+            assert refund_count == 0
+
+            # ------------------------------------------
+            # 11. Verify audit was rolled back
+            # ------------------------------------------
+
+            audit = db.scalar(
+                select(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id == action_id
+                )
+            )
+
+            assert audit is None
+
+        finally:
+            # Roll back the outer transaction
+            # to remove all test data.
+            db.rollback()
+
+
+def test_refund_execution_is_idempotent_when_called_twice():
+
+    # ------------------------------------------
+    # 1. Verify the test database
+    # ------------------------------------------
+
+    assert engine.url.database == "resolveai_test"
+
+    with SessionLocal() as db:
+        try:
+            assert (
+                db.execute(text("SELECT current_database()")).scalar_one()
+                == "resolveai_test"
+            )
+
+            # ------------------------------------------
+            # 2. Create an eligible order
+            # ------------------------------------------
+
+            token = uuid4().hex
+
+            conversation = Conversation(
+                title="Refund execution idempotency test",
+            )
+
+            customer = Customer(
+                customer_code=f"TST-RFI-{token[:12]}",
+                name="Refund Idempotency Test",
+                email=f"refund-idempotency-{token}@example.com",
+            )
+
+            db.add_all([conversation, customer])
+            db.flush()
+
+            order = Order(
+                order_number=f"ORD-{uuid4().int % 10**18:018d}",
+                customer_id=customer.id,
+                status="processing",
+                payment_status="paid",
+                total_amount=Decimal("1299.00"),
+                currency="INR",
+                shipping_address="Test address",
+            )
+
+            db.add(order)
+            db.flush()
+
+            order_id = order.id
+            order_number = order.order_number
+
+            # ------------------------------------------
+            # 3. Create and confirm PendingAction
+            # ------------------------------------------
+
+            pending_service = PendingActionService(db)
+
+            action = pending_service.create_pending_action(
+                conversation_id=conversation.id,
+                action_type="initiate_refund",
+                target_type="order",
+                target_identifier=order_number,
+                action_data={
+                    "order_status": "processing",
+                    "payment_status": "paid",
+                    "refund_amount": "1299.00",
+                    "currency": "INR",
+                    "eligible": True,
+                    "requires_confirmation": True,
+                    "action_performed": False,
+                },
+            )
+
+            action_id = action.id
+
+            confirmed = pending_service.confirm_pending_action(conversation.id)
+
+            assert confirmed is not None
+            assert confirmed.status == "confirmed"
+            assert confirmed.confirmed_at is not None
+
+            # ------------------------------------------
+            # 4. FIRST execution
+            # ------------------------------------------
+
+            from src.services.refund_execution_service import (
+                RefundExecutionService,
+            )
+
+            execution_service = RefundExecutionService(db)
+
+            first_result = execution_service.execute(action_id)
+
+            assert first_result.success is True
+            assert first_result.executed is True
+            assert first_result.already_executed is False
+
+            assert first_result.action_status == "executed"
+
+            db.flush()
+
+            # ------------------------------------------
+            # 5. Record the first execution details
+            # ------------------------------------------
+
+            refunds_before = db.scalars(
+                select(Refund).where(Refund.order_id == order_id)
+            ).all()
+
+            assert len(refunds_before) == 1
+
+            original_refund = refunds_before[0]
+
+            original_refund_id = original_refund.id
+            original_refund_number = original_refund.refund_number
+            original_initiated_at = original_refund.initiated_at
+
+            original_audit = db.scalar(
+                select(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id == action_id
+                )
+            )
+
+            assert original_audit is not None
+
+            original_audit_id = original_audit.id
+
+            original_action = db.get(
+                PendingAction,
+                action_id,
+            )
+
+            assert original_action is not None
+            assert original_action.status == "executed"
+
+            original_action_data = dict(original_action.action_data)
+
+            # ------------------------------------------
+            # 6. SECOND execution
+            # ------------------------------------------
+
+            # Simulate the same refund execution
+            # being requested again.
+            #
+            # This must NOT initiate another refund.
+
+            second_result = execution_service.execute(action_id)
+
+            # ------------------------------------------
+            # 7. Verify idempotent response
+            # ------------------------------------------
+
+            assert second_result.success is True
+
+            # No NEW execution occurred.
+            assert second_result.executed is False
+
+            # The service recognized the
+            # previously executed PendingAction.
+            assert second_result.already_executed is True
+
+            assert second_result.action_id == action_id
+            assert second_result.action_status == "executed"
+
+            assert second_result.order_number == order_number
+
+            # ------------------------------------------
+            # 8. Reload authoritative database state
+            # ------------------------------------------
+
+            db.flush()
+            db.expire_all()
+
+            stored_action = db.get(
+                PendingAction,
+                action_id,
+            )
+
+            stored_order = db.get(
+                Order,
+                order_id,
+            )
+
+            assert stored_action is not None
+            assert stored_action.status == "executed"
+            assert stored_action.confirmed_at is not None
+
+            assert stored_action.action_data["action_performed"] is True
+
+            # The second execution must not
+            # overwrite the original metadata.
+            assert stored_action.action_data == original_action_data
+
+            assert stored_order is not None
+            assert stored_order.status == "processing"
+            assert stored_order.payment_status == "paid"
+
+            # ------------------------------------------
+            # 9. Verify exactly ONE Refund exists
+            # ------------------------------------------
+
+            refunds_after = db.scalars(
+                select(Refund).where(Refund.order_id == order_id)
+            ).all()
+
+            assert len(refunds_after) == 1
+
+            stored_refund = refunds_after[0]
+
+            assert stored_refund.id == original_refund_id
+
+            assert stored_refund.refund_number == original_refund_number
+
+            assert stored_refund.initiated_at == original_initiated_at
+
+            assert stored_refund.status == "processing"
+            assert stored_refund.amount == Decimal("1299.00")
+            assert stored_refund.currency == "INR"
+
+            # ------------------------------------------
+            # 10. Verify exactly ONE audit exists
+            # ------------------------------------------
+
+            audits = db.scalars(
+                select(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id == action_id
+                )
+            ).all()
+
+            assert len(audits) == 1
+
+            audit = audits[0]
+
+            assert audit.id == original_audit_id
+
+            assert audit.outcome == "executed"
+            assert audit.action_performed is True
+
+            assert audit.details["refund_id"] == original_refund_id
+
+            assert audit.details["refund_number"] == original_refund_number
+
+        finally:
+            # Never persist test data.
+            db.rollback()

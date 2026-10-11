@@ -154,6 +154,130 @@ class RefundExecutionService:
                 reason=("Pending action is not an order refund initiation action."),
             )
 
+
+        if action.status == EXECUTED:
+
+            # Read the execution metadata.
+            action_data = (
+                action.action_data
+                if isinstance(action.action_data, dict)
+                else {}
+            )
+
+            refund_id = action_data.get("refund_id")
+            refund_number = action_data.get("refund_number")
+
+            # Lock the authoritative order.
+            #
+            # Maintain the established lock ordering:
+            # PendingAction -> Order.
+
+            order = self.db.scalar(
+                select(Order)
+                .where(Order.order_number == order_number)
+                .with_for_update()
+            )
+
+            # Retrieve the refund recorded by
+            # the original execution.
+            #
+            # Reject invalid identifiers rather than
+            # trusting the JSONB metadata.
+
+            refund = None
+
+            if type(refund_id) is int and refund_id > 0:
+                refund = self.db.get(
+                    Refund,
+                    refund_id,
+                )
+
+            # Retrieve the original execution audit.
+            audit = self.db.scalar(
+                select(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id
+                    == action.id
+                )
+            )
+
+            audit_details = (
+                audit.details
+                if audit is not None
+                and isinstance(audit.details, dict)
+                else {}
+            )
+
+            # Read the originally confirmed amount.
+            # Do not compare it with the current order
+            # total because the order may have changed
+            # AFTER the refund was initiated.
+
+            recorded_amount = None
+
+            raw_amount = action_data.get("refund_amount")
+
+            if isinstance(raw_amount, str):
+                try:
+                    recorded_amount = Decimal(raw_amount)
+                except InvalidOperation:
+                    pass
+
+
+            records_consistent = (
+                action.confirmed_at is not None
+                and action_data.get("action_performed") is True
+                and action_data.get("eligible") is True
+                and action_data.get("requires_confirmation") is True
+                and order is not None
+                and refund is not None
+                and audit is not None
+                and recorded_amount is not None
+                and recorded_amount.is_finite()
+                and recorded_amount > 0
+                and isinstance(refund_number, str)
+                and refund.order_id == order.id
+                and refund.refund_number == refund_number
+                and refund.amount == recorded_amount
+                and refund.currency == action_data.get("currency")
+                and audit.outcome == EXECUTED
+                and audit.action_performed is True
+                and audit.conversation_id == action.conversation_id
+                and audit.action_type == "initiate_refund"
+                and audit.target_type == "order"
+                and audit.target_identifier == order_number
+                and audit_details.get("refund_id") == refund_id
+                and audit_details.get("refund_number") == refund_number
+            )
+
+
+            if not records_consistent:
+                return RefundExecutionResult(
+                    success=False,
+                    executed=False,
+                    already_executed=False,
+                    action_id=action.id,
+                    action_status=action.status,
+                    order_number=order_number,
+                    order_status=(
+                        order.status if order is not None else None
+                    ),
+                    reason=(
+                        "Previously executed refund action "
+                        "has inconsistent records."
+                    ),
+                )
+
+            return RefundExecutionResult(
+                success=True,
+                executed=False,
+                already_executed=True,
+                action_id=action.id,
+                action_status=EXECUTED,
+                order_number=order_number,
+                order_status=order.status,
+                reason="Refund initiation was already recorded.",
+            )
+
         if action.status != CONFIRMED:
             return RefundExecutionResult(
                 success=False,
@@ -336,3 +460,5 @@ class RefundExecutionService:
             order_status=order.status,
             reason=success_reason,
         )
+
+
