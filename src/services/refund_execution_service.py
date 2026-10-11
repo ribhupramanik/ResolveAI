@@ -252,9 +252,10 @@ class RefundExecutionService:
             or snapshot_amount != order.total_amount
             or snapshot_amount != eligibility.refund_amount
         ):
-            return blocked_result(
-                "Refund amount no longer matches the order.",
-                order_status=order.status,
+            return self._invalidate_action(
+                action=action,
+                order=order,
+                reason="Refund amount no longer matches the order.",
             )
 
         current_currency = order.currency.strip().upper()
