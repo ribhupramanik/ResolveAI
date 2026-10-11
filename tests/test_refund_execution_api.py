@@ -1,6 +1,7 @@
 from decimal import Decimal
 from uuid import uuid4
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, text
@@ -422,3 +423,279 @@ def test_unconfirmed_refund_execution_via_api_returns_409():
                 db.execute(delete(Customer).where(Customer.id == customer_id))
 
                 db.commit()
+
+
+@pytest.mark.parametrize(
+    (
+        "scenario",
+        "expected_status",
+        "expected_detail",
+    ),
+    [
+        (
+            "missing_conversation",
+            404,
+            "Conversation not found.",
+        ),
+        (
+            "missing_action",
+            404,
+            "Pending action not found.",
+        ),
+        (
+            "foreign_conversation",
+            404,
+            "Pending action not found.",
+        ),
+        (
+            "wrong_action_type",
+            409,
+            "Pending action cannot be executed by this endpoint.",
+        ),
+    ],
+)
+def test_refund_execution_api_validates_conversation_and_action(
+    scenario,
+    expected_status,
+    expected_detail,
+):
+    assert engine.url.database == "resolveai_test"
+
+    token = uuid4().hex
+
+    customer_id = None
+    order_id = None
+    conversation_ids = []
+    action_ids = []
+
+    setup_committed = False
+
+    try:
+        with SessionLocal() as db:
+            assert (
+                db.execute(text("SELECT current_database()")).scalar_one()
+                == "resolveai_test"
+            )
+
+            customer = Customer(
+                customer_code=f"TST-RAV-{token[:12]}",
+                name="Refund API Validation Test",
+                email=f"refund-validation-{token}@example.com",
+            )
+
+            refund_conversation = Conversation(
+                title="Refund validation conversation",
+            )
+
+            other_conversation = Conversation(
+                title="Other validation conversation",
+            )
+
+            db.add_all(
+                [
+                    customer,
+                    refund_conversation,
+                    other_conversation,
+                ]
+            )
+
+            db.flush()
+
+            customer_id = customer.id
+
+            conversation_ids = [
+                refund_conversation.id,
+                other_conversation.id,
+            ]
+
+            order = Order(
+                order_number=f"ORD-{uuid4().int % 10**18:018d}",
+                customer_id=customer_id,
+                status="processing",
+                payment_status="paid",
+                total_amount=Decimal("1299.00"),
+                currency="INR",
+                shipping_address="Test address",
+            )
+
+            db.add(order)
+            db.flush()
+
+            order_id = order.id
+
+            pending_service = PendingActionService(db)
+
+            refund_action = pending_service.create_pending_action(
+                conversation_id=refund_conversation.id,
+                action_type="initiate_refund",
+                target_type="order",
+                target_identifier=order.order_number,
+                action_data={
+                    "order_status": "processing",
+                    "payment_status": "paid",
+                    "refund_amount": "1299.00",
+                    "currency": "INR",
+                    "eligible": True,
+                    "requires_confirmation": True,
+                    "action_performed": False,
+                },
+            )
+
+            refund_action_id = refund_action.id
+
+            confirmed_refund = pending_service.confirm_pending_action(
+                refund_conversation.id
+            )
+
+            assert confirmed_refund is not None
+            assert confirmed_refund.status == "confirmed"
+
+            cancellation_action = pending_service.create_pending_action(
+                conversation_id=other_conversation.id,
+                action_type="cancel_order",
+                target_type="order",
+                target_identifier=order.order_number,
+                action_data={
+                    "order_status": "processing",
+                    "eligible": True,
+                    "requires_confirmation": True,
+                    "action_performed": False,
+                },
+            )
+
+            cancellation_action_id = cancellation_action.id
+
+            confirmed_cancellation = pending_service.confirm_pending_action(
+                other_conversation.id
+            )
+
+            assert confirmed_cancellation is not None
+            assert confirmed_cancellation.status == "confirmed"
+
+            action_ids = [
+                refund_action_id,
+                cancellation_action_id,
+            ]
+
+            db.commit()
+            setup_committed = True
+
+        app = FastAPI()
+
+        app.include_router(
+            conversations.router,
+            prefix="/api/v1",
+        )
+
+        def override_db():
+            with SessionLocal() as db:
+                assert (
+                    db.execute(text("SELECT current_database()")).scalar_one()
+                    == "resolveai_test"
+                )
+
+                yield db
+
+        app.dependency_overrides[get_db] = override_db
+
+        if scenario == "missing_conversation":
+            request_conversation_id = 0
+            request_action_id = refund_action_id
+
+        elif scenario == "missing_action":
+            request_conversation_id = conversation_ids[0]
+            request_action_id = 0
+
+        elif scenario == "foreign_conversation":
+            request_conversation_id = conversation_ids[1]
+            request_action_id = refund_action_id
+
+        else:
+            request_conversation_id = conversation_ids[1]
+            request_action_id = cancellation_action_id
+
+        endpoint = (
+            f"/api/v1/conversations/{request_conversation_id}"
+            f"/pending-actions/{request_action_id}/refund/execute"
+        )
+
+        with TestClient(app) as client:
+            response = client.post(endpoint)
+
+        assert response.status_code == expected_status
+
+        assert response.json() == {"detail": expected_detail}
+
+        with SessionLocal() as db:
+            assert (
+                db.execute(text("SELECT current_database()")).scalar_one()
+                == "resolveai_test"
+            )
+
+            stored_order = db.get(
+                Order,
+                order_id,
+            )
+
+            assert stored_order is not None
+            assert stored_order.status == "processing"
+            assert stored_order.payment_status == "paid"
+
+            actions = db.scalars(
+                select(PendingAction).where(PendingAction.id.in_(action_ids))
+            ).all()
+
+            assert len(actions) == 2
+
+            for action in actions:
+                assert action.status == "confirmed"
+                assert action.confirmed_at is not None
+                assert action.action_data["action_performed"] is False
+
+            refunds = db.scalars(
+                select(Refund).where(Refund.order_id == order_id)
+            ).all()
+
+            assert refunds == []
+
+            audits = db.scalars(
+                select(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id.in_(action_ids)
+                )
+            ).all()
+
+            assert audits == []
+
+            db.rollback()
+
+    finally:
+        if setup_committed:
+            with SessionLocal() as db:
+                assert (
+                    db.execute(text("SELECT current_database()")).scalar_one()
+                    == "resolveai_test"
+                )
+
+                db.execute(
+                    delete(ActionExecutionAudit).where(
+                        ActionExecutionAudit.pending_action_id.in_(action_ids)
+                    )
+                )
+
+                db.execute(delete(Refund).where(Refund.order_id == order_id))
+
+                db.execute(
+                    delete(PendingAction).where(PendingAction.id.in_(action_ids))
+                )
+
+                db.execute(delete(Order).where(Order.id == order_id))
+
+                db.execute(
+                    delete(Conversation).where(Conversation.id.in_(conversation_ids))
+                )
+
+                db.execute(delete(Customer).where(Customer.id == customer_id))
+
+                db.commit()
+
+
