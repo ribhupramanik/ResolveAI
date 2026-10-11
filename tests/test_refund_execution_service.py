@@ -1379,3 +1379,219 @@ def test_confirmed_refund_is_invalidated_when_order_amount_changes():
         finally:
             # Never persist test records.
             db.rollback()
+
+
+def test_confirmed_refund_is_invalidated_when_order_currency_changes():
+
+    # ------------------------------------------
+    # 1. Verify the test database
+    # ------------------------------------------
+
+    assert engine.url.database == "resolveai_test"
+
+    with SessionLocal() as db:
+        try:
+            assert (
+                db.execute(text("SELECT current_database()")).scalar_one()
+                == "resolveai_test"
+            )
+
+            # ------------------------------------------
+            # 2. Create an initially eligible order
+            # ------------------------------------------
+
+            token = uuid4().hex
+
+            conversation = Conversation(
+                title="Refund currency revalidation test",
+            )
+
+            customer = Customer(
+                customer_code=f"TST-RFC-{token[:12]}",
+                name="Refund Currency Test",
+                email=f"refund-currency-{token}@example.com",
+            )
+
+            db.add_all([conversation, customer])
+            db.flush()
+
+            order = Order(
+                order_number=f"ORD-{uuid4().int % 10**18:018d}",
+                customer_id=customer.id,
+                status="processing",
+                payment_status="paid",
+                total_amount=Decimal("1299.00"),
+                currency="INR",
+                shipping_address="Test address",
+            )
+
+            db.add(order)
+            db.flush()
+
+            order_id = order.id
+            order_number = order.order_number
+
+            # ------------------------------------------
+            # 3. Create the refund PendingAction
+            # ------------------------------------------
+
+            pending_service = PendingActionService(db)
+
+            action = pending_service.create_pending_action(
+                conversation_id=conversation.id,
+                action_type="initiate_refund",
+                target_type="order",
+                target_identifier=order_number,
+                action_data={
+                    "order_status": "processing",
+                    "payment_status": "paid",
+                    "refund_amount": "1299.00",
+                    "currency": "INR",
+                    "eligible": True,
+                    "requires_confirmation": True,
+                    "action_performed": False,
+                },
+            )
+
+            action_id = action.id
+
+            # ------------------------------------------
+            # 4. Explicitly confirm the refund
+            # ------------------------------------------
+
+            confirmed = pending_service.confirm_pending_action(conversation.id)
+
+            assert confirmed is not None
+            assert confirmed.status == "confirmed"
+            assert confirmed.confirmed_at is not None
+
+            # ------------------------------------------
+            # 5. Change the authoritative currency
+            # ------------------------------------------
+
+            # Original confirmed currency: INR
+            # Current order currency: USD
+            #
+            # The numeric amount remains unchanged.
+
+            order.currency = "USD"
+
+            db.flush()
+
+            # ------------------------------------------
+            # 6. Attempt refund execution
+            # ------------------------------------------
+
+            from src.services.refund_execution_service import (
+                RefundExecutionService,
+            )
+
+            result = RefundExecutionService(db).execute(action_id)
+
+            assert result.success is False
+            assert result.executed is False
+            assert result.already_executed is False
+
+            assert result.action_id == action_id
+            assert result.order_number == order_number
+            assert result.order_status == "processing"
+
+            # New requirement:
+            # The stale confirmation must be invalidated.
+            assert result.action_status == "invalidated"
+
+            expected_reason = "Refund currency no longer matches the order."
+
+            assert result.reason == expected_reason
+
+            # ------------------------------------------
+            # 7. Reload authoritative database state
+            # ------------------------------------------
+
+            db.flush()
+            db.expire_all()
+
+            stored_order = db.get(
+                Order,
+                order_id,
+            )
+
+            stored_action = db.get(
+                PendingAction,
+                action_id,
+            )
+
+            # The execution service must not change
+            # the authoritative order.
+            assert stored_order is not None
+            assert stored_order.status == "processing"
+            assert stored_order.payment_status == "paid"
+
+            assert stored_order.total_amount == Decimal("1299.00")
+
+            assert stored_order.currency == "USD"
+
+            # ------------------------------------------
+            # 8. Verify PendingAction invalidation
+            # ------------------------------------------
+
+            assert stored_action is not None
+
+            assert stored_action.status == "invalidated"
+            assert stored_action.confirmed_at is not None
+
+            assert stored_action.action_data["action_performed"] is False
+
+            # The original confirmed financial
+            # snapshot must remain unchanged.
+            assert stored_action.action_data["refund_amount"] == "1299.00"
+
+            assert stored_action.action_data["currency"] == "INR"
+
+            assert (
+                stored_action.action_data["execution_blocked_reason"] == expected_reason
+            )
+
+            # ------------------------------------------
+            # 9. Verify no Refund was created
+            # ------------------------------------------
+
+            refunds = db.scalars(
+                select(Refund).where(Refund.order_id == order_id)
+            ).all()
+
+            assert refunds == []
+
+            # ------------------------------------------
+            # 10. Verify execution audit
+            # ------------------------------------------
+
+            audit = db.scalar(
+                select(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id == action_id
+                )
+            )
+
+            assert audit is not None
+
+            assert audit.outcome == "invalidated"
+            assert audit.action_performed is False
+
+            assert audit.action_type == "initiate_refund"
+            assert audit.target_type == "order"
+
+            assert audit.target_identifier == order_number
+
+            assert audit.previous_target_status == "processing"
+
+            assert audit.final_target_status == "processing"
+
+            assert audit.reason == expected_reason
+
+            assert audit.details is not None
+
+            assert audit.details["blocked_stage"] == "execution_revalidation"
+
+        finally:
+            # Never persist test records.
+            db.rollback()

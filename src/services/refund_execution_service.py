@@ -263,11 +263,13 @@ class RefundExecutionService:
         if (
             snapshot_currency != current_currency
             or eligibility.currency is None
-            or snapshot_currency != eligibility.currency.strip().upper()
+            or snapshot_currency
+            != eligibility.currency.strip().upper()
         ):
-            return blocked_result(
-                "Refund currency no longer matches the order.",
-                order_status=order.status,
+            return self._invalidate_action(
+                action=action,
+                order=order,
+                reason="Refund currency no longer matches the order.",
             )
 
         initiated_at = datetime.now(UTC)
