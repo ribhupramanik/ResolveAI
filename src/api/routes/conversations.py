@@ -1,6 +1,6 @@
 from datetime import (
+    UTC,
     datetime,
-    timezone,
 )
 from typing import Annotated
 
@@ -37,6 +37,9 @@ from src.api.schemas.message import (
 from src.api.schemas.pending_action import (
     PendingActionResponse,
 )
+from src.api.schemas.refund_execution import (
+    RefundExecutionResponse,
+)
 from src.db.models import (
     Conversation,
     Message,
@@ -65,6 +68,9 @@ from src.services.pending_action_service import (
     PENDING,
     REJECTED,
     PendingActionService,
+)
+from src.services.refund_execution_service import (
+    RefundExecutionService,
 )
 
 router = APIRouter(
@@ -334,7 +340,7 @@ def confirm_and_execute_pending_action(
         # button is the confirmation event.
         if action.status == PENDING:
             action.status = CONFIRMED
-            action.confirmed_at = datetime.now(timezone.utc)
+            action.confirmed_at = datetime.now(UTC)
 
             db.flush()
 
@@ -402,7 +408,7 @@ def confirm_and_execute_pending_action(
 
             db.add(assistant_message)
 
-            conversation.updated_at = datetime.now(timezone.utc)
+            conversation.updated_at = datetime.now(UTC)
 
         db.commit()
 
@@ -422,6 +428,86 @@ def confirm_and_execute_pending_action(
         success=result.success,
         executed=result.executed,
         already_executed=(result.already_executed),
+        action_status=result.action_status,
+        order_number=result.order_number,
+        order_status=result.order_status,
+        reason=result.reason,
+    )
+
+
+@router.post(
+    "/{conversation_id}/pending-actions/{action_id}/refund/execute",
+    response_model=RefundExecutionResponse,
+)
+def execute_confirmed_refund(
+    conversation_id: int,
+    action_id: int,
+    db: DatabaseDependency,
+) -> RefundExecutionResponse:
+    conversation = db.get(
+        Conversation,
+        conversation_id,
+    )
+
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found.",
+        )
+
+    try:
+        action_info = db.execute(
+            select(
+                PendingAction.conversation_id,
+                PendingAction.action_type,
+                PendingAction.target_type,
+            ).where(PendingAction.id == action_id)
+        ).one_or_none()
+
+        if action_info is None or action_info.conversation_id != conversation.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Pending action not found.",
+            )
+
+        if (
+            action_info.action_type != "initiate_refund"
+            or action_info.target_type != "order"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Pending action cannot be executed by this endpoint.",
+            )
+
+        result = RefundExecutionService(db).execute(action_id)
+
+        should_commit = result.success or result.action_status == INVALIDATED
+
+        if not should_commit:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=result.reason,
+            )
+
+        db.commit()
+
+    except HTTPException:
+        db.rollback()
+        raise
+
+    except Exception as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Refund execution failed.",
+        ) from exc
+
+    return RefundExecutionResponse(
+        action_id=action_id,
+        success=result.success,
+        executed=result.executed,
+        already_executed=result.already_executed,
         action_status=result.action_status,
         order_number=result.order_number,
         order_status=result.order_status,
@@ -508,7 +594,7 @@ def reject_pending_action_by_id(
 
             db.add(assistant_message)
 
-            conversation.updated_at = datetime.now(timezone.utc)
+            conversation.updated_at = datetime.now(UTC)
 
             db.flush()
 
@@ -769,7 +855,7 @@ def send_message(
 
             db.add(assistant_message)
 
-            conversation.updated_at = datetime.now(timezone.utc)
+            conversation.updated_at = datetime.now(UTC)
 
             db.commit()
 
@@ -869,7 +955,7 @@ def send_message(
 
         db.add(assistant_message)
 
-        conversation.updated_at = datetime.now(timezone.utc)
+        conversation.updated_at = datetime.now(UTC)
 
         db.commit()
 
