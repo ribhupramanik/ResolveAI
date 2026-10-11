@@ -516,6 +516,128 @@ def execute_confirmed_refund(
 
 
 @router.post(
+    "/{conversation_id}/pending-actions/{action_id}/refund/confirm-and-execute",
+    response_model=RefundExecutionResponse,
+)
+def confirm_and_execute_refund(
+    conversation_id: int,
+    action_id: int,
+    db: DatabaseDependency,
+) -> RefundExecutionResponse:
+    conversation = db.get(
+        Conversation,
+        conversation_id,
+    )
+
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found.",
+        )
+
+    try:
+        action = db.scalar(
+            select(PendingAction).where(PendingAction.id == action_id).with_for_update()
+        )
+
+        if action is None or action.conversation_id != conversation.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Pending action not found.",
+            )
+
+        if action.action_type != "initiate_refund" or action.target_type != "order":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Pending action cannot be executed by this endpoint.",
+            )
+
+        if action.status == PENDING:
+            action.status = CONFIRMED
+            action.confirmed_at = datetime.now(UTC)
+
+            db.flush()
+
+        elif action.status not in {
+            CONFIRMED,
+            EXECUTED,
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Refund cannot be confirmed "
+                    f"because the action is '{action.status}'."
+                ),
+            )
+
+        result = RefundExecutionService(db).execute(action_id)
+
+        should_commit = result.success or result.action_status == INVALIDATED
+
+        if not should_commit:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=result.reason,
+            )
+
+        assistant_text = None
+
+        if result.executed:
+            assistant_text = (
+                f"Your refund request for order "
+                f"{result.order_number} has been recorded "
+                f"and is processing. "
+                f"This does not mean the refund has been completed."
+            )
+
+        elif result.action_status == INVALIDATED:
+            target_identifier = result.order_number or action.target_identifier
+
+            assistant_text = (
+                f"The refund request for order "
+                f"{target_identifier} could not be initiated. "
+                f"{result.reason}"
+            )
+
+        if assistant_text is not None:
+            assistant_message = Message(
+                conversation_id=conversation.id,
+                role="assistant",
+                content=assistant_text,
+                ai_metadata=None,
+            )
+
+            db.add(assistant_message)
+
+            conversation.updated_at = datetime.now(UTC)
+
+        db.commit()
+
+    except HTTPException:
+        db.rollback()
+        raise
+
+    except Exception as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Refund confirmation and execution failed.",
+        ) from exc
+
+    return RefundExecutionResponse(
+        action_id=action_id,
+        success=result.success,
+        executed=result.executed,
+        already_executed=result.already_executed,
+        action_status=result.action_status,
+        order_number=result.order_number,
+        order_status=result.order_status,
+        reason=result.reason,
+    )
+
+
+@router.post(
     "/{conversation_id}/pending-actions/{action_id}/reject",
     response_model=PendingActionResponse,
 )
