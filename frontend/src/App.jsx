@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import {
   confirmAndExecutePendingAction,
+  confirmAndExecuteRefund,
   createConversation,
   getConversationMessages,
   getConversations,
@@ -185,11 +186,14 @@ function App() {
       if (decision === "confirm") {
         const action = pendingAction;
 
-        await confirmAndExecutePendingAction(activeConversationId, action.id);
+        if (action.action_type === "cancel_order") {
+          await confirmAndExecutePendingAction(activeConversationId, action.id);
+        } else if (action.action_type === "initiate_refund") {
+          await confirmAndExecuteRefund(activeConversationId, action.id);
+        } else {
+          throw new Error("Unsupported pending action type.");
+        }
 
-        // The backend persists the result message.
-        // Reload the conversation so React displays
-        // the authoritative database state.
         await loadConversationData(activeConversationId);
 
         await loadConversations();
@@ -217,7 +221,9 @@ function App() {
       throw new Error("Unknown pending action decision.");
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to process cancellation.",
+        err instanceof Error
+          ? err.message
+          : "Failed to process the pending action.",
       );
     } finally {
       setActionLoading(false);
