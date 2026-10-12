@@ -511,3 +511,28 @@ def test_refund_status_question_does_not_trigger_refund_eligibility():
     result = router.run("Can I get a refund status for ORD-10002?")
 
     assert result.tool_name == "get_refund_status"
+
+
+def test_refund_initiation_request_uses_refund_eligibility_tool():
+    (
+        router,
+        order_lookup,
+        cancellation,
+        refund_status,
+    ) = create_router_with_refund()
+
+    refund_eligibility = router.refund_eligibility_tool
+
+    result = router.run(
+        "I want to initiate a refund for order ORD-10002."
+    )
+
+    assert result is not None
+
+    assert result.tool_name == "check_refund_eligibility"
+
+    assert refund_eligibility.calls == ["ORD-10002"]
+
+    assert refund_status.calls == []
+    assert order_lookup.calls == []
+    assert cancellation.calls == []

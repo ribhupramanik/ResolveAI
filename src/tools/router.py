@@ -82,6 +82,19 @@ REFUND_ELIGIBILITY_QUESTION_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+REFUND_INITIATION_PATTERN = re.compile(
+    r"\b(?:initiate|request|start|process)\s+"
+    r"(?:(?:a|the|my)\s+)?refund\b"
+    r"|\b(?:i|we)\s+(?:want|need)\s+"
+    r"(?:to\s+(?:get|receive)\s+)?"
+    r"(?:(?:a|the)\s+)?refund\b"
+    r"(?!\s+status\b)"
+    r"|\bi(?:'d| would)\s+like\s+"
+    r"(?:(?:a|the)\s+)?refund\b"
+    r"(?!\s+status\b)",
+    re.IGNORECASE,
+)
+
 
 def extract_order_number(
     query: str,
@@ -124,10 +137,13 @@ def is_refund_request(
 def is_refund_action_request(
     query: str,
 ) -> bool:
-
-    return (
-        REFUND_ACTION_PATTERN.search(query) is not None
-        or REFUND_ELIGIBILITY_QUESTION_PATTERN.search(query) is not None
+    return any(
+        pattern.search(query) is not None
+        for pattern in (
+            REFUND_ACTION_PATTERN,
+            REFUND_ELIGIBILITY_QUESTION_PATTERN,
+            REFUND_INITIATION_PATTERN,
+        )
     )
 
 
