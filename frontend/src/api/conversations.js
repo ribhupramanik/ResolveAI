@@ -98,6 +98,33 @@ export async function confirmAndExecutePendingAction(conversationId, actionId) {
   return response.json();
 }
 
+export async function confirmAndExecuteRefund(conversationId, actionId) {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/conversations/${conversationId}/pending-actions/${actionId}/refund/confirm-and-execute`,
+    {
+      method: "POST",
+    },
+  );
+
+  if (!response.ok) {
+    let message = "Failed to initiate the refund.";
+
+    try {
+      const data = await response.json();
+
+      if (data?.detail) {
+        message = data.detail;
+      }
+    } catch {
+      message = "Failed to initiate the refund.";
+    }
+
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
 export async function rejectPendingAction(conversationId, actionId) {
   const response = await fetch(
     `${API_BASE_URL}/api/v1/conversations/${conversationId}/pending-actions/${actionId}/reject`,
