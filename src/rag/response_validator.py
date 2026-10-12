@@ -38,7 +38,7 @@ class ResponseValidator:
 
     REFUND_PROCESSING_CLAIM_PATTERN = re.compile(
         r"\b(?:the|your|my|this|a)\s+refund"
-        r"(?:\s+request)?\s+"
+        r"(?:\s+(?:request|process))?\s+"
         r"(?:is|has\s+been)\s+"
         r"(?:(?:currently|already|now)\s+)?"
         r"(?:in\s+(?:(?:a|the)\s+)?)?"
