@@ -694,6 +694,7 @@ class ResponseValidator:
                 read_only_tool_names = {
                     "get_order",
                     "check_cancellation_eligibility",
+                    "check_refund_eligibility",
                     "get_refund_status",
                 }
 

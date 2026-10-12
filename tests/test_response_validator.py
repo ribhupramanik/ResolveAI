@@ -1314,3 +1314,45 @@ def test_refund_eligibility_rejects_premature_processing_claim(
     assert any(
         issue.code == "unsupported_refund_state_claim" for issue in result.issues
     )
+
+
+def test_successful_refund_eligibility_check_allows_checked_claim(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    tool_result = ToolResult(
+        tool_name="check_refund_eligibility",
+        success=True,
+        data={
+            "found": True,
+            "order_number": "ORD-10002",
+            "status": "processing",
+            "payment_status": "paid",
+            "eligible": True,
+            "refund_amount": "1299.00",
+            "currency": "INR",
+            "requires_confirmation": True,
+            "action_performed": False,
+        },
+    )
+
+    operational_context = build_operational_context(tool_result)
+
+    response = (
+        "I've checked the refund eligibility for ORD-10002. "
+        "The order is eligible for a refund. "
+        "No refund has been initiated, and your confirmation is required."
+    )
+
+    result = validator.validate(
+        response_text=response,
+        query="I want to initiate a refund for order ORD-10002.",
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+        operational_context=operational_context,
+    )
+
+    assert result.is_valid is True
+
+    assert not any(issue.code == "unsupported_action_claim" for issue in result.issues)
