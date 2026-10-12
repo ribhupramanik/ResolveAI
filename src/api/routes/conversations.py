@@ -863,61 +863,101 @@ def send_message(
                 raise RuntimeError("Handled pending action has no action.")
 
             if pending_decision.decision == "confirmed":
-                if (
-                    action.action_type != "cancel_order"
-                    or action.target_type != "order"
-                ):
-                    if (
-                        action.action_type == "initiate_refund"
-                        and action.target_type == "order"
-                    ):
-                        raise HTTPException(
-                            status_code=status.HTTP_409_CONFLICT,
-                            detail="Refund execution is not available yet.",
-                        )
-
+                if action.target_type != "order":
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
                         detail="Pending action cannot be executed through chat.",
                     )
 
-                # Existing cancellation execution logic.
-                execution_result = CancellationExecutionService(db).execute(action.id)
-
-                should_commit = (
-                    execution_result.success
-                    or execution_result.action_status == INVALIDATED
-                )
-
-                if not should_commit:
-                    raise RuntimeError(execution_result.reason)
-
-                if execution_result.executed:
-                    assistant_text = (
-                        f"Order "
-                        f"{execution_result.order_number} "
-                        f"has been cancelled successfully."
+                if action.action_type == "cancel_order":
+                    execution_result = CancellationExecutionService(db).execute(
+                        action.id
                     )
 
-                elif execution_result.already_executed:
-                    assistant_text = (
-                        f"Order {execution_result.order_number} was already cancelled."
+                    should_commit = (
+                        execution_result.success
+                        or execution_result.action_status == INVALIDATED
                     )
 
-                elif execution_result.action_status == INVALIDATED:
-                    target_identifier = (
-                        execution_result.order_number or action.target_identifier
+                    if not should_commit:
+                        raise RuntimeError(execution_result.reason)
+
+                    if execution_result.executed:
+                        assistant_text = (
+                            f"Order {execution_result.order_number} "
+                            f"has been cancelled successfully."
+                        )
+
+                    elif execution_result.already_executed:
+                        assistant_text = (
+                            f"Order {execution_result.order_number} "
+                            f"was already cancelled."
+                        )
+
+                    elif execution_result.action_status == INVALIDATED:
+                        target_identifier = (
+                            execution_result.order_number or action.target_identifier
+                        )
+
+                        assistant_text = (
+                            f"The cancellation for "
+                            f"{target_identifier} "
+                            f"could not be completed. "
+                            f"{execution_result.reason}"
+                        )
+
+                    else:
+                        raise RuntimeError("Unexpected cancellation execution result.")
+
+                elif action.action_type == "initiate_refund":
+                    execution_result = RefundExecutionService(db).execute(action.id)
+
+                    should_commit = (
+                        execution_result.success
+                        or execution_result.action_status == INVALIDATED
                     )
 
-                    assistant_text = (
-                        f"The cancellation for "
-                        f"{target_identifier} "
-                        f"could not be completed. "
-                        f"{execution_result.reason}"
-                    )
+                    if not should_commit:
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail=execution_result.reason,
+                        )
+
+                    if execution_result.executed:
+                        assistant_text = (
+                            f"Your refund request for order "
+                            f"{execution_result.order_number} "
+                            f"has been recorded and is processing. "
+                            f"This does not mean the refund has been completed."
+                        )
+
+                    elif execution_result.already_executed:
+                        assistant_text = (
+                            f"Your refund request for order "
+                            f"{execution_result.order_number} "
+                            f"was already recorded and is processing."
+                        )
+
+                    elif execution_result.action_status == INVALIDATED:
+                        target_identifier = (
+                            execution_result.order_number or action.target_identifier
+                        )
+
+                        assistant_text = (
+                            f"The refund request for order "
+                            f"{target_identifier} "
+                            f"could not be initiated. "
+                            f"{execution_result.reason}"
+                        )
+
+                    else:
+                        raise RuntimeError("Unexpected refund execution result.")
 
                 else:
-                    raise RuntimeError("Unexpected cancellation execution result.")
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Pending action cannot be executed through chat.",
+                    )
 
             elif pending_decision.decision == "rejected":
                 if (

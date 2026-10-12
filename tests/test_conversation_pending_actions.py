@@ -626,6 +626,10 @@ def execution_case_factory(db):
             )
 
             cleanup_db.execute(
+                delete(Refund).where(Refund.order_id == case["order_id"])
+            )
+
+            cleanup_db.execute(
                 delete(PendingAction).where(PendingAction.id == case["action_id"])
             )
 
@@ -1647,8 +1651,6 @@ def test_chat_refund_confirmation_does_not_execute_cancellation(
     fake_pipeline,
     monkeypatch,
 ):
-    # Create a real test order, conversation,
-    # and pending action in resolveai_test.
     case = execution_case_factory(
         action_status="pending",
     )
@@ -1658,10 +1660,10 @@ def test_chat_refund_confirmation_does_not_execute_cancellation(
     action = case["action"]
 
     order_id = order.id
+    order_number = order.order_number
+    conversation_id = conversation.id
     action_id = action.id
 
-    # Convert the test PendingAction into
-    # a refund initiation request.
     action.action_type = "initiate_refund"
 
     action.action_data = {
@@ -1676,8 +1678,6 @@ def test_chat_refund_confirmation_does_not_execute_cancellation(
 
     db.commit()
 
-    # The cancellation service must never
-    # receive a refund action.
     def forbidden_cancellation_execution(*args, **kwargs):
         raise AssertionError(
             "CancellationExecutionService must not be called for refund initiation."
@@ -1689,20 +1689,33 @@ def test_chat_refund_confirmation_does_not_execute_cancellation(
         forbidden_cancellation_execution,
     )
 
-    # Customer attempts to confirm the refund.
     response = client.post(
-        f"/api/v1/conversations/{conversation.id}/messages",
+        f"/api/v1/conversations/{conversation_id}/messages",
         json={
             "message": "yes",
         },
     )
 
-    # Refund execution is not implemented yet.
-    assert response.status_code == 409
+    assert response.status_code == 201, response.text
 
-    assert response.json() == {
-        "detail": "Refund execution is not available yet.",
-    }
+    data = response.json()
+
+    assert fake_pipeline.run_calls == 0
+
+    assert data["pending_action"] is None
+
+    assert data["user_message"]["role"] == "user"
+    assert data["user_message"]["content"] == "yes"
+
+    assistant_text = data["assistant_message"]["content"]
+
+    assert data["assistant_message"]["role"] == "assistant"
+
+    assert order_number in assistant_text
+    assert "refund" in assistant_text.lower()
+    assert "processing" in assistant_text.lower()
+
+    assert "refunded successfully" not in assistant_text.lower()
 
     db.expire_all()
 
@@ -1716,31 +1729,51 @@ def test_chat_refund_confirmation_does_not_execute_cancellation(
         action_id,
     )
 
-    # No cancellation occurred.
+    assert stored_order is not None
     assert stored_order.status == "processing"
+    assert stored_order.payment_status == "paid"
 
-    # The refund request remains pending.
-    assert stored_action.status == "pending"
-    assert stored_action.confirmed_at is None
+    assert stored_action is not None
+    assert stored_action.status == "executed"
+    assert stored_action.confirmed_at is not None
 
-    assert stored_action.action_data["action_performed"] is False
+    assert stored_action.action_type == "initiate_refund"
+    assert stored_action.target_type == "order"
 
-    # No refund record was created.
-    refund = db.scalar(select(Refund).where(Refund.order_id == order_id))
+    assert stored_action.action_data["action_performed"] is True
 
-    assert refund is None
+    refunds = db.scalars(select(Refund).where(Refund.order_id == order_id)).all()
 
-    # No execution audit was created.
-    audit = db.scalar(
+    assert len(refunds) == 1
+
+    refund = refunds[0]
+
+    assert refund.status == "processing"
+    assert refund.amount == Decimal("999.00")
+    assert refund.currency == "INR"
+    assert refund.completed_at is None
+
+    assert stored_action.action_data["refund_id"] == refund.id
+
+    audits = db.scalars(
         select(ActionExecutionAudit).where(
             ActionExecutionAudit.pending_action_id == action_id
         )
-    )
+    ).all()
 
-    assert audit is None
+    assert len(audits) == 1
 
-    # Confirmation handling should not invoke RAG.
-    assert fake_pipeline.run_calls == 0
+    audit = audits[0]
+
+    assert audit.outcome == "executed"
+    assert audit.action_performed is True
+
+    assert audit.action_type == "initiate_refund"
+    assert audit.target_type == "order"
+
+    assert audit.target_identifier == order_number
+
+    assert audit.details["refund_id"] == refund.id
 
 
 def test_eligible_refund_returns_pending_action(
