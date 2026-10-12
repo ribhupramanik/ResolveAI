@@ -1873,3 +1873,441 @@ def test_chat_refund_confirmation_invalidates_when_order_ships():
                 db.execute(delete(Customer).where(Customer.id == customer_id))
 
                 db.commit()
+
+
+def test_chat_refund_rejection_does_not_initiate_refund():
+    assert engine.url.database == "resolveai_test"
+
+    token = uuid4().hex
+
+    customer_id = None
+    conversation_id = None
+    order_id = None
+    action_id = None
+
+    setup_committed = False
+
+    try:
+        with SessionLocal() as db:
+            assert (
+                db.execute(text("SELECT current_database()")).scalar_one()
+                == "resolveai_test"
+            )
+
+            customer = Customer(
+                customer_code=f"TST-RCR-{token[:12]}",
+                name="Refund Chat Rejection Test",
+                email=f"refund-chat-rejection-{token}@example.com",
+            )
+
+            conversation = Conversation(
+                title="Refund chat rejection test",
+            )
+
+            db.add_all([customer, conversation])
+            db.flush()
+
+            customer_id = customer.id
+            conversation_id = conversation.id
+
+            order = Order(
+                order_number=f"ORD-{uuid4().int % 10**18:018d}",
+                customer_id=customer_id,
+                status="processing",
+                payment_status="paid",
+                total_amount=Decimal("1299.00"),
+                currency="INR",
+                shipping_address="Test address",
+            )
+
+            db.add(order)
+            db.flush()
+
+            order_id = order.id
+            order_number = order.order_number
+
+            service = PendingActionService(db)
+
+            action = service.create_pending_action(
+                conversation_id=conversation_id,
+                action_type="initiate_refund",
+                target_type="order",
+                target_identifier=order_number,
+                action_data={
+                    "order_status": "processing",
+                    "payment_status": "paid",
+                    "refund_amount": "1299.00",
+                    "currency": "INR",
+                    "eligible": True,
+                    "requires_confirmation": True,
+                    "action_performed": False,
+                },
+            )
+
+            action_id = action.id
+
+            assert action.status == "pending"
+            assert action.confirmed_at is None
+            assert action.action_data["action_performed"] is False
+
+            db.commit()
+            setup_committed = True
+
+        app = FastAPI()
+
+        app.include_router(
+            conversations.router,
+            prefix="/api/v1",
+        )
+
+        def override_db():
+            with SessionLocal() as db:
+                assert (
+                    db.execute(text("SELECT current_database()")).scalar_one()
+                    == "resolveai_test"
+                )
+
+                yield db
+
+        app.dependency_overrides[get_db] = override_db
+        app.dependency_overrides[get_pipeline] = lambda: object()
+
+        endpoint = f"/api/v1/conversations/{conversation_id}/messages"
+
+        with TestClient(app) as client:
+            response = client.post(
+                endpoint,
+                json={"message": "no"},
+            )
+
+        assert response.status_code == 201, response.text
+
+        data = response.json()
+
+        assert data["pending_action"] is None
+
+        assert data["user_message"]["role"] == "user"
+        assert data["user_message"]["content"] == "no"
+
+        assistant_text = data["assistant_message"]["content"]
+
+        assert data["assistant_message"]["role"] == "assistant"
+
+        assert order_number in assistant_text
+        assert "refund" in assistant_text.lower()
+        assert "rejected" in assistant_text.lower()
+
+        assert "no refund has been initiated" in assistant_text.lower()
+
+        with SessionLocal() as db:
+            assert (
+                db.execute(text("SELECT current_database()")).scalar_one()
+                == "resolveai_test"
+            )
+
+            stored_order = db.get(
+                Order,
+                order_id,
+            )
+
+            stored_action = db.get(
+                PendingAction,
+                action_id,
+            )
+
+            assert stored_order is not None
+            assert stored_order.status == "processing"
+            assert stored_order.payment_status == "paid"
+
+            assert stored_order.total_amount == Decimal("1299.00")
+            assert stored_order.currency == "INR"
+
+            assert stored_action is not None
+            assert stored_action.status == "rejected"
+            assert stored_action.confirmed_at is None
+
+            assert stored_action.action_type == "initiate_refund"
+            assert stored_action.target_type == "order"
+
+            assert stored_action.action_data["action_performed"] is False
+
+            refunds = db.scalars(
+                select(Refund).where(Refund.order_id == order_id)
+            ).all()
+
+            assert refunds == []
+
+            audits = db.scalars(
+                select(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id == action_id
+                )
+            ).all()
+
+            assert audits == []
+
+            messages = db.scalars(
+                select(Message)
+                .where(Message.conversation_id == conversation_id)
+                .order_by(Message.id)
+            ).all()
+
+            assert len(messages) == 2
+
+            assert messages[0].role == "user"
+            assert messages[0].content == "no"
+
+            assert messages[1].role == "assistant"
+            assert messages[1].content == assistant_text
+
+            db.rollback()
+
+    finally:
+        if setup_committed:
+            with SessionLocal() as db:
+                assert (
+                    db.execute(text("SELECT current_database()")).scalar_one()
+                    == "resolveai_test"
+                )
+
+                db.execute(
+                    delete(ActionExecutionAudit).where(
+                        ActionExecutionAudit.pending_action_id == action_id
+                    )
+                )
+
+                db.execute(delete(Refund).where(Refund.order_id == order_id))
+
+                db.execute(
+                    delete(Message).where(Message.conversation_id == conversation_id)
+                )
+
+                db.execute(delete(PendingAction).where(PendingAction.id == action_id))
+
+                db.execute(delete(Order).where(Order.id == order_id))
+
+                db.execute(
+                    delete(Conversation).where(Conversation.id == conversation_id)
+                )
+
+                db.execute(delete(Customer).where(Customer.id == customer_id))
+
+                db.commit()
+
+
+def test_chat_refund_rejection_does_not_initiate_refund():
+    assert engine.url.database == "resolveai_test"
+
+    token = uuid4().hex
+
+    customer_id = None
+    conversation_id = None
+    order_id = None
+    action_id = None
+
+    setup_committed = False
+
+    try:
+        with SessionLocal() as db:
+            assert (
+                db.execute(text("SELECT current_database()")).scalar_one()
+                == "resolveai_test"
+            )
+
+            customer = Customer(
+                customer_code=f"TST-RCR-{token[:12]}",
+                name="Refund Chat Rejection Test",
+                email=f"refund-chat-rejection-{token}@example.com",
+            )
+
+            conversation = Conversation(
+                title="Refund chat rejection test",
+            )
+
+            db.add_all([customer, conversation])
+            db.flush()
+
+            customer_id = customer.id
+            conversation_id = conversation.id
+
+            order = Order(
+                order_number=f"ORD-{uuid4().int % 10**18:018d}",
+                customer_id=customer_id,
+                status="processing",
+                payment_status="paid",
+                total_amount=Decimal("1299.00"),
+                currency="INR",
+                shipping_address="Test address",
+            )
+
+            db.add(order)
+            db.flush()
+
+            order_id = order.id
+            order_number = order.order_number
+
+            service = PendingActionService(db)
+
+            action = service.create_pending_action(
+                conversation_id=conversation_id,
+                action_type="initiate_refund",
+                target_type="order",
+                target_identifier=order_number,
+                action_data={
+                    "order_status": "processing",
+                    "payment_status": "paid",
+                    "refund_amount": "1299.00",
+                    "currency": "INR",
+                    "eligible": True,
+                    "requires_confirmation": True,
+                    "action_performed": False,
+                },
+            )
+
+            action_id = action.id
+
+            assert action.status == "pending"
+            assert action.confirmed_at is None
+            assert action.action_data["action_performed"] is False
+
+            db.commit()
+            setup_committed = True
+
+        app = FastAPI()
+
+        app.include_router(
+            conversations.router,
+            prefix="/api/v1",
+        )
+
+        def override_db():
+            with SessionLocal() as db:
+                assert (
+                    db.execute(text("SELECT current_database()")).scalar_one()
+                    == "resolveai_test"
+                )
+
+                yield db
+
+        app.dependency_overrides[get_db] = override_db
+        app.dependency_overrides[get_pipeline] = lambda: object()
+
+        endpoint = f"/api/v1/conversations/{conversation_id}/messages"
+
+        with TestClient(app) as client:
+            response = client.post(
+                endpoint,
+                json={"message": "no"},
+            )
+
+        assert response.status_code == 201, response.text
+
+        data = response.json()
+
+        assert data["pending_action"] is None
+
+        assert data["user_message"]["role"] == "user"
+        assert data["user_message"]["content"] == "no"
+
+        assistant_text = data["assistant_message"]["content"]
+
+        assert data["assistant_message"]["role"] == "assistant"
+
+        assert order_number in assistant_text
+        assert "refund" in assistant_text.lower()
+        assert "rejected" in assistant_text.lower()
+
+        assert "no refund has been initiated" in assistant_text.lower()
+
+        with SessionLocal() as db:
+            assert (
+                db.execute(text("SELECT current_database()")).scalar_one()
+                == "resolveai_test"
+            )
+
+            stored_order = db.get(
+                Order,
+                order_id,
+            )
+
+            stored_action = db.get(
+                PendingAction,
+                action_id,
+            )
+
+            assert stored_order is not None
+            assert stored_order.status == "processing"
+            assert stored_order.payment_status == "paid"
+
+            assert stored_order.total_amount == Decimal("1299.00")
+            assert stored_order.currency == "INR"
+
+            assert stored_action is not None
+            assert stored_action.status == "rejected"
+            assert stored_action.confirmed_at is None
+
+            assert stored_action.action_type == "initiate_refund"
+            assert stored_action.target_type == "order"
+
+            assert stored_action.action_data["action_performed"] is False
+
+            refunds = db.scalars(
+                select(Refund).where(Refund.order_id == order_id)
+            ).all()
+
+            assert refunds == []
+
+            audits = db.scalars(
+                select(ActionExecutionAudit).where(
+                    ActionExecutionAudit.pending_action_id == action_id
+                )
+            ).all()
+
+            assert audits == []
+
+            messages = db.scalars(
+                select(Message)
+                .where(Message.conversation_id == conversation_id)
+                .order_by(Message.id)
+            ).all()
+
+            assert len(messages) == 2
+
+            assert messages[0].role == "user"
+            assert messages[0].content == "no"
+
+            assert messages[1].role == "assistant"
+            assert messages[1].content == assistant_text
+
+            db.rollback()
+
+    finally:
+        if setup_committed:
+            with SessionLocal() as db:
+                assert (
+                    db.execute(text("SELECT current_database()")).scalar_one()
+                    == "resolveai_test"
+                )
+
+                db.execute(
+                    delete(ActionExecutionAudit).where(
+                        ActionExecutionAudit.pending_action_id == action_id
+                    )
+                )
+
+                db.execute(delete(Refund).where(Refund.order_id == order_id))
+
+                db.execute(
+                    delete(Message).where(Message.conversation_id == conversation_id)
+                )
+
+                db.execute(delete(PendingAction).where(PendingAction.id == action_id))
+
+                db.execute(delete(Order).where(Order.id == order_id))
+
+                db.execute(
+                    delete(Conversation).where(Conversation.id == conversation_id)
+                )
+
+                db.execute(delete(Customer).where(Customer.id == customer_id))
+
+                db.commit()
