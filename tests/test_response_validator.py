@@ -5,6 +5,7 @@ from src.rag.knowledge_retriever import (
 )
 from src.rag.operational_context import (
     OperationalContext,
+    build_operational_context,
 )
 from src.rag.response_validator import (
     ResponseValidator,
@@ -1268,3 +1269,48 @@ def test_failed_lookup_in_multi_tool_run_rejects_looked_up_claim(
     assert not result.is_valid
 
     assert any(issue.code == "unsupported_action_claim" for issue in result.issues)
+
+
+def test_refund_eligibility_rejects_premature_processing_claim(
+    validator,
+    verified_knowledge,
+    system_capabilities,
+):
+    tool_result = ToolResult(
+        tool_name="check_refund_eligibility",
+        success=True,
+        data={
+            "found": True,
+            "order_number": "ORD-10002",
+            "status": "processing",
+            "payment_status": "paid",
+            "eligible": True,
+            "reason_code": "eligible",
+            "refund_amount": "1299.00",
+            "currency": "INR",
+            "requires_confirmation": True,
+            "action_performed": False,
+        },
+    )
+
+    operational_context = build_operational_context(tool_result)
+
+    response = (
+        "Order ORD-10002 is eligible for a refund. "
+        "The refund is currently in a processing state "
+        "and requires your confirmation before it can be completed."
+    )
+
+    result = validator.validate(
+        response_text=response,
+        query="I want to initiate a refund for order ORD-10002.",
+        verified_knowledge=verified_knowledge,
+        system_capabilities=system_capabilities,
+        operational_context=operational_context,
+    )
+
+    assert result.is_valid is False
+
+    assert any(
+        issue.code == "unsupported_refund_state_claim" for issue in result.issues
+    )

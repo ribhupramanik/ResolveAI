@@ -36,6 +36,17 @@ class ValidationResult:
 class ResponseValidator:
     PLACEHOLDER_PATTERN = re.compile(r"\{\{[^{}]+\}\}")
 
+    REFUND_PROCESSING_CLAIM_PATTERN = re.compile(
+        r"\b(?:the|your|my|this|a)\s+refund"
+        r"(?:\s+request)?\s+"
+        r"(?:is|has\s+been)\s+"
+        r"(?:(?:currently|already|now)\s+)?"
+        r"(?:in\s+(?:(?:a|the)\s+)?)?"
+        r"[\"'“”‘’]?"
+        r"(?:processing|being\s+processed)\b",
+        re.IGNORECASE,
+    )
+
     ACTION_PATTERNS = [  # noqa: RUF012
         # I/we can check...
         # I/we will investigate...
@@ -574,6 +585,12 @@ class ResponseValidator:
             operational_context=operational_context,
         )
 
+        self._check_refund_state_claims(
+            response_text,
+            issues,
+            operational_context=operational_context,
+        )
+
         self._check_support_route_claims(
             response_text,
             issues,
@@ -721,6 +738,53 @@ class ResponseValidator:
                         matched_text=(matched_text),
                     )
                 )
+
+    def _check_refund_state_claims(
+        self,
+        response_text: str,
+        issues: list[ValidationIssue],
+        operational_context: OperationalContext | None = None,
+    ) -> None:
+        if operational_context is None:
+            return
+
+        if (
+            operational_context.tool_name != "check_refund_eligibility"
+            or operational_context.tool_success is not True
+        ):
+            return
+
+        action_not_performed = any(
+            result.tool_name == "check_refund_eligibility"
+            and result.success is True
+            and result.data.get("action_performed") is False
+            for result in operational_context.tool_results
+        )
+
+        if not action_not_performed:
+            action_not_performed = (
+                re.search(
+                    r"(?mi)^\s*-\s*action_performed:\s*false\s*$",
+                    operational_context.context,
+                )
+                is not None
+            )
+
+        if not action_not_performed:
+            return
+
+        for match in self.REFUND_PROCESSING_CLAIM_PATTERN.finditer(response_text):
+            issues.append(
+                ValidationIssue(
+                    code="unsupported_refund_state_claim",
+                    message=(
+                        "Response claims that a refund is processing, "
+                        "but the eligibility check confirms that "
+                        "no refund action has been performed."
+                    ),
+                    matched_text=match.group(0),
+                )
+            )
 
     def _check_support_route_claims(
         self,
