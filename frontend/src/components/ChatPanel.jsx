@@ -11,9 +11,39 @@ function ChatPanel({
   actionLoading,
   onPendingActionDecision,
 }) {
-  const hasCancellationPending =
+  const isCancellationPending =
     pendingAction?.action_type === "cancel_order" &&
     pendingAction?.status === "pending";
+
+  const isRefundPending =
+    pendingAction?.action_type === "initiate_refund" &&
+    pendingAction?.status === "pending";
+
+  const hasPendingAction = isCancellationPending || isRefundPending;
+
+  const actionTitle = isRefundPending
+    ? "Confirm refund request"
+    : "Confirm cancellation";
+
+  const actionDescription = isRefundPending
+    ? "Confirming will initiate an internal refund request if the order is still eligible. This does not mean the money has been refunded."
+    : "Confirming will cancel the order immediately if it is still eligible.";
+
+  const confirmButtonLabel = actionLoading
+    ? isRefundPending
+      ? "Initiating refund..."
+      : "Cancelling..."
+    : isRefundPending
+      ? "Confirm refund"
+      : "Confirm cancellation";
+
+  const rejectButtonLabel = isRefundPending ? "Reject refund" : "Keep order";
+
+  const inputPlaceholder = actionLoading
+    ? isRefundPending
+      ? "Processing refund request..."
+      : "Processing cancellation..."
+    : "Ask ResolveAI...";
 
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-slate-950">
@@ -44,26 +74,27 @@ function ChatPanel({
           />
         ))}
 
-        {hasCancellationPending && (
+        {hasPendingAction && (
           <div className="ml-11 max-w-xl">
             <div className="rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-lg">
               <div className="flex items-start gap-3">
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-slate-100">
-                    Confirm cancellation
+                    {actionTitle}
                   </p>
 
                   <p className="mt-2 text-sm leading-6 text-slate-400">
-                    Do you want to cancel{" "}
+                    {isRefundPending
+                      ? "Do you want to initiate a refund for "
+                      : "Do you want to cancel "}
                     <span className="font-semibold text-slate-200">
                       {pendingAction.target_identifier}
                     </span>
                     ?
                   </p>
 
-                  <p className="mt-1 text-xs text-slate-500">
-                    Confirming will cancel the order immediately if it is
-                    still eligible.
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    {actionDescription}
                   </p>
                 </div>
               </div>
@@ -73,9 +104,13 @@ function ChatPanel({
                   type="button"
                   disabled={actionLoading || loading}
                   onClick={() => onPendingActionDecision("confirm")}
-                  className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={
+                    isRefundPending
+                      ? "rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      : "rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  }
                 >
-                  {actionLoading ? "Cancelling..." : "Confirm cancellation"}
+                  {confirmButtonLabel}
                 </button>
 
                 <button
@@ -84,7 +119,7 @@ function ChatPanel({
                   onClick={() => onPendingActionDecision("reject")}
                   className="rounded-lg border border-slate-600 bg-slate-950 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Keep order
+                  {rejectButtonLabel}
                 </button>
               </div>
             </div>
@@ -105,9 +140,7 @@ function ChatPanel({
           <textarea
             value={message}
             onChange={(event) => setMessage(event.target.value)}
-            placeholder={
-              actionLoading ? "Processing cancellation..." : "Ask ResolveAI..."
-            }
+            placeholder={inputPlaceholder}
             rows={2}
             disabled={actionLoading}
             className="max-h-40 min-h-12 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
