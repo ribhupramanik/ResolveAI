@@ -320,6 +320,21 @@ class ResolveAIPipeline:
 
         retry_rules = []
 
+        if "unsupported_refund_state_claim" in issue_codes:
+            retry_rules.append(
+                "- The order may be processing, but the refund "
+                "has not been initiated. "
+                "Eligibility checking does not initiate a refund. "
+                "Explicit customer confirmation is required "
+                "before initiating an eligible refund request. "
+                "Describe the refund eligibility using verified "
+                "tool evidence and explain the confirmation requirement. "
+                "Do not claim the refund is processing unless "
+                "authoritative refund-status or execution evidence "
+                "explicitly supports that state."
+            )
+
+
         if "unsupported_action_claim" in issue_codes:
             retry_rules.append(
                 "- Do not claim that ResolveAI can check, "
