@@ -2491,3 +2491,84 @@ def test_ineligible_refund_does_not_supersede_existing_pending_action(
     assert active_action is not None
 
     assert active_action.id == existing_action_id
+
+
+def test_chat_cancellation_confirmation_does_not_execute_refund(
+    client,
+    db,
+    execution_case_factory,
+    fake_pipeline,
+    monkeypatch,
+):
+    case = execution_case_factory(
+        action_status="pending",
+    )
+
+    order_id = case["order"].id
+    order_number = case["order"].order_number
+    conversation_id = case["conversation"].id
+    action_id = case["action"].id
+
+    def forbidden_refund_execution(*args, **kwargs):
+        raise AssertionError(
+            "RefundExecutionService must not be called for cancellation."
+        )
+
+    monkeypatch.setattr(
+        conversations,
+        "RefundExecutionService",
+        forbidden_refund_execution,
+    )
+
+    response = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"message": "yes"},
+    )
+
+    assert response.status_code == 201, response.text
+
+    data = response.json()
+
+    assert fake_pipeline.run_calls == 0
+    assert data["pending_action"] is None
+
+    assert data["user_message"]["content"] == "yes"
+
+    assert data["assistant_message"]["content"] == (
+        f"Order {order_number} has been cancelled successfully."
+    )
+
+    db.expire_all()
+
+    stored_order = db.get(Order, order_id)
+    stored_action = db.get(PendingAction, action_id)
+
+    assert stored_order is not None
+    assert stored_order.status == "cancelled"
+
+    assert stored_action is not None
+    assert stored_action.status == "executed"
+    assert stored_action.confirmed_at is not None
+    assert stored_action.action_type == "cancel_order"
+
+    assert stored_action.action_data["action_performed"] is True
+
+    refunds = db.scalars(select(Refund).where(Refund.order_id == order_id)).all()
+
+    assert refunds == []
+
+    audits = db.scalars(
+        select(ActionExecutionAudit).where(
+            ActionExecutionAudit.pending_action_id == action_id
+        )
+    ).all()
+
+    assert len(audits) == 1
+
+    audit = audits[0]
+
+    assert audit.outcome == "executed"
+    assert audit.action_performed is True
+    assert audit.action_type == "cancel_order"
+    assert audit.target_type == "order"
+    assert audit.target_identifier == order_number
