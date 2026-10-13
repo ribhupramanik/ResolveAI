@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 OrderStatus = Literal[
     "processing",
@@ -82,3 +82,54 @@ class DemoOrderCreate(BaseModel):
     )
 
     estimated_delivery: date | None = None
+
+
+class DemoOrderUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: OrderStatus | None = None
+    payment_status: PaymentStatus | None = None
+
+    total_amount: Decimal | None = Field(
+        default=None,
+        gt=0,
+        max_digits=10,
+        decimal_places=2,
+    )
+
+    shipping_address: str | None = Field(
+        default=None,
+        min_length=1,
+    )
+
+    carrier: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+
+    tracking_number: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+
+    estimated_delivery: date | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_changes(cls, data: object) -> object:
+        if isinstance(data, dict):
+            if not data:
+                raise ValueError("At least one field must be provided.")
+
+            required_fields = (
+                "status",
+                "payment_status",
+                "total_amount",
+                "shipping_address",
+            )
+
+            for field in required_fields:
+                if field in data and data[field] is None:
+                    raise ValueError(f"{field} cannot be null.")
+
+        return data
