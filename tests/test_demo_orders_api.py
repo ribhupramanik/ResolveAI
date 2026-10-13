@@ -435,3 +435,112 @@ def test_demo_orders_update_persists_status_change():
                 db.execute(delete(Customer).where(Customer.id == customer_id))
 
             db.commit()
+
+
+def test_demo_orders_update_rejects_missing_order():
+    assert engine.url.database == "resolveai_test"
+
+    missing_order_id = 2_000_000_000
+
+    with SessionLocal() as db:
+        assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+        assert db.get(Order, missing_order_id) is None
+
+    with TestClient(app) as client:
+        response = client.patch(
+            f"/api/v1/demo/orders/{missing_order_id}",
+            json={
+                "status": "shipped",
+            },
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Order not found."
+
+
+def test_demo_orders_update_rejects_invalid_fields():
+    assert engine.url.database == "resolveai_test"
+
+    token = uuid4().hex
+    order_number = f"ORD-{uuid4().int % 10**18:018d}"
+
+    customer_id = None
+    order_id = None
+
+    try:
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            customer = Customer(
+                customer_code=f"TST-VALID-{token[:12]}",
+                name="Update Validation Customer",
+                email=f"update-validation-{token}@example.com",
+            )
+
+            db.add(customer)
+            db.flush()
+
+            customer_id = customer.id
+
+            order = Order(
+                order_number=order_number,
+                customer_id=customer_id,
+                status="processing",
+                payment_status="paid",
+                total_amount=Decimal("2499.00"),
+                currency="INR",
+                shipping_address="Kolkata, West Bengal",
+            )
+
+            db.add(order)
+            db.flush()
+
+            order_id = order.id
+
+            db.commit()
+
+        invalid_payloads = [
+            {"status": "teleported"},
+            {"payment_status": "unknown"},
+            {"order_number": "ORD-99999"},
+            {"total_amount": "0.00"},
+            {"status": None},
+            {"shipping_address": None},
+            {},
+        ]
+
+        with TestClient(app) as client:
+            for payload in invalid_payloads:
+                response = client.patch(
+                    f"/api/v1/demo/orders/{order_id}",
+                    json=payload,
+                )
+
+                assert response.status_code == 422, (
+                    f"Payload: {payload}, Response: {response.text}"
+                )
+
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            stored_order = db.get(Order, order_id)
+
+            assert stored_order is not None
+            assert stored_order.order_number == order_number
+            assert stored_order.status == "processing"
+            assert stored_order.payment_status == "paid"
+            assert stored_order.total_amount == Decimal("2499.00")
+            assert stored_order.shipping_address == "Kolkata, West Bengal"
+
+    finally:
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            if order_id is not None:
+                db.execute(delete(Order).where(Order.id == order_id))
+
+            if customer_id is not None:
+                db.execute(delete(Customer).where(Customer.id == customer_id))
+
+            db.commit()
