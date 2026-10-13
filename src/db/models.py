@@ -390,6 +390,12 @@ class Order(Base):
         back_populates="order",
         order_by="Refund.created_at",
     )
+    is_demo_managed: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
 
 
 class Refund(Base):

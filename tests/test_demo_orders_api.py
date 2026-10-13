@@ -765,3 +765,78 @@ def test_demo_orders_update_rejects_order_with_refund_history():
                 db.execute(delete(Customer).where(Customer.id == customer_id))
 
             db.commit()
+
+
+def test_demo_orders_delete_removes_created_order():
+    assert engine.url.database == "resolveai_test"
+
+    token = uuid4().hex
+    order_number = f"ORD-{uuid4().int % 10**18:018d}"
+
+    customer_id = None
+
+    try:
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            customer = Customer(
+                customer_code=f"TST-DELETE-{token[:12]}",
+                name="Demo Delete Customer",
+                email=f"demo-delete-{token}@example.com",
+            )
+
+            db.add(customer)
+            db.flush()
+
+            customer_id = customer.id
+
+            db.commit()
+
+        payload = {
+            "order_number": order_number,
+            "customer_id": customer_id,
+            "status": "processing",
+            "payment_status": "paid",
+            "total_amount": "2499.00",
+            "currency": "INR",
+            "shipping_address": "Kolkata, West Bengal",
+        }
+
+        with TestClient(app) as client:
+            create_response = client.post(
+                "/api/v1/demo/orders",
+                json=payload,
+            )
+
+            assert create_response.status_code == 201, create_response.text
+
+            order_id = create_response.json()["id"]
+
+            delete_response = client.delete(f"/api/v1/demo/orders/{order_id}")
+
+        assert delete_response.status_code == 204, delete_response.text
+
+        assert delete_response.content == b""
+
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            stored_order = db.get(Order, order_id)
+
+            assert stored_order is None
+
+            stored_customer = db.get(Customer, customer_id)
+
+            assert stored_customer is not None
+            assert stored_customer.name == "Demo Delete Customer"
+
+    finally:
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            db.execute(delete(Order).where(Order.order_number == order_number))
+
+            if customer_id is not None:
+                db.execute(delete(Customer).where(Customer.id == customer_id))
+
+            db.commit()
