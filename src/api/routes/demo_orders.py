@@ -11,7 +11,13 @@ from src.api.schemas.demo_order import (
     DemoOrderResponse,
     DemoOrderUpdate,
 )
-from src.db.models import Customer, Order, PendingAction, Refund
+from src.db.models import (
+    ActionExecutionAudit,
+    Customer,
+    Order,
+    PendingAction,
+    Refund,
+)
 
 router = APIRouter(
     prefix="/demo/orders",
@@ -99,7 +105,10 @@ def create_demo_order(
             detail="Order number already exists.",
         )
 
-    order = Order(**payload.model_dump())
+    order = Order(
+        **payload.model_dump(),
+        is_demo_managed=True,
+    )
 
     try:
         db.add(order)
@@ -207,3 +216,79 @@ def update_demo_order(
         created_at=order.created_at,
         updated_at=order.updated_at,
     )
+
+
+@router.delete(
+    "/{order_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_demo_order(
+    order_id: int,
+    db: DatabaseDependency,
+) -> None:
+
+    order = db.scalar(select(Order).where(Order.id == order_id).with_for_update())
+
+    if order is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found.",
+        )
+
+    if not order.is_demo_managed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only demo-managed orders can be deleted.",
+        )
+
+    existing_action = db.scalar(
+        select(PendingAction.id)
+        .where(
+            PendingAction.target_type == "order",
+            PendingAction.target_identifier == order.order_number,
+        )
+        .limit(1)
+    )
+
+    if existing_action is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=("This order has action history and cannot be deleted."),
+        )
+
+    existing_audit = db.scalar(
+        select(ActionExecutionAudit.id)
+        .where(
+            ActionExecutionAudit.target_type == "order",
+            ActionExecutionAudit.target_identifier == order.order_number,
+        )
+        .limit(1)
+    )
+
+    if existing_audit is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=("This order has execution audit history and cannot be deleted."),
+        )
+
+    existing_refund = db.scalar(
+        select(Refund.id).where(Refund.order_id == order.id).limit(1)
+    )
+
+    if existing_refund is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=("This order has refund history and cannot be deleted."),
+        )
+
+    try:
+        db.delete(order)
+        db.commit()
+
+    except IntegrityError as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=("This order has related records and cannot be deleted."),
+        ) from exc
