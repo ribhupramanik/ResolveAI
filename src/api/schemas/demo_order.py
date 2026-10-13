@@ -1,7 +1,24 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+
+OrderStatus = Literal[
+    "processing",
+    "shipped",
+    "delivered",
+    "cancelled",
+]
+
+PaymentStatus = Literal[
+    "pending",
+    "unpaid",
+    "paid",
+    "failed",
+    "refunded",
+]
 
 
 class DemoOrderResponse(BaseModel):
@@ -36,15 +53,9 @@ class DemoOrderCreate(BaseModel):
 
     customer_id: int = Field(gt=0)
 
-    status: str = Field(
-        min_length=1,
-        max_length=30,
-    )
+    status: OrderStatus
 
-    payment_status: str = Field(
-        min_length=1,
-        max_length=30,
-    )
+    payment_status: PaymentStatus
 
     total_amount: Decimal = Field(
         gt=0,

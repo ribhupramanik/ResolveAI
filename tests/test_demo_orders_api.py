@@ -1,6 +1,7 @@
 from decimal import Decimal
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, text
 
@@ -157,6 +158,75 @@ def test_demo_orders_create_persists_order():
             assert stored_order.total_amount == Decimal("2499.00")
             assert stored_order.currency == "INR"
             assert stored_order.shipping_address == "Kolkata, West Bengal"
+
+    finally:
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            db.execute(delete(Order).where(Order.order_number == order_number))
+
+            db.execute(delete(Customer).where(Customer.id == customer_id))
+
+            db.commit()
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    [
+        ("status", "teleported"),
+        ("payment_status", "unknown"),
+    ],
+)
+def test_demo_order_create_rejects_invalid_statuses(
+    field,
+    invalid_value,
+):
+    assert engine.url.database == "resolveai_test"
+
+    token = uuid4().hex
+    order_number = f"ORD-{uuid4().int % 10**18:018d}"
+
+    with SessionLocal() as db:
+        assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+        customer = Customer(
+            customer_code=f"TST-STATUS-{token[:12]}",
+            name="Status Validation Customer",
+            email=f"status-validation-{token}@example.com",
+        )
+
+        db.add(customer)
+        db.commit()
+
+        customer_id = customer.id
+
+    try:
+        payload = {
+            "order_number": order_number,
+            "customer_id": customer_id,
+            "status": "processing",
+            "payment_status": "paid",
+            "total_amount": "1499.00",
+            "currency": "INR",
+            "shipping_address": "Kolkata, West Bengal",
+        }
+
+        payload[field] = invalid_value
+
+        client = TestClient(app)
+
+        response = client.post(
+            "/api/v1/demo/orders",
+            json=payload,
+        )
+
+        assert response.status_code == 422, response.text
+
+        with SessionLocal() as db:
+            assert (
+                db.scalar(select(Order.id).where(Order.order_number == order_number))
+                is None
+            )
 
     finally:
         with SessionLocal() as db:
