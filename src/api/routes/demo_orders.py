@@ -1,13 +1,13 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_db
-from src.api.schemas.demo_order import DemoOrderResponse
+from src.api.schemas.demo_order import DemoOrderCreate, DemoOrderResponse
 from src.db.models import Customer, Order
-
 
 router = APIRouter(
     prefix="/demo/orders",
@@ -62,3 +62,68 @@ def list_demo_orders(
         )
         for order, customer_name in rows
     ]
+
+
+@router.post(
+    "",
+    response_model=DemoOrderResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_demo_order(
+    payload: DemoOrderCreate,
+    db: DatabaseDependency,
+) -> DemoOrderResponse:
+
+    customer = db.get(
+        Customer,
+        payload.customer_id,
+    )
+
+    if customer is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found.",
+        )
+
+    existing_order = db.scalar(
+        select(Order.id).where(Order.order_number == payload.order_number)
+    )
+
+    if existing_order is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Order number already exists.",
+        )
+
+    order = Order(**payload.model_dump())
+
+    try:
+        db.add(order)
+        db.commit()
+
+    except IntegrityError as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Order creation violates a database constraint.",
+        ) from exc
+
+    db.refresh(order)
+
+    return DemoOrderResponse(
+        id=order.id,
+        order_number=order.order_number,
+        customer_id=order.customer_id,
+        customer_name=customer.name,
+        status=order.status,
+        payment_status=order.payment_status,
+        total_amount=order.total_amount,
+        currency=order.currency,
+        shipping_address=order.shipping_address,
+        carrier=order.carrier,
+        tracking_number=order.tracking_number,
+        estimated_delivery=order.estimated_delivery,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+    )
