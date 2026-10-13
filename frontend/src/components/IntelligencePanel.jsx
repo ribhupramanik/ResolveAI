@@ -1,6 +1,6 @@
 function IntelligencePanel({ metadata }) {
   return (
-    <aside className="hidden w-80 shrink-0 border-l border-slate-800 bg-slate-900/40 xl:block">
+    <aside className="hidden h-full min-h-0 w-80 shrink-0 overflow-y-auto overscroll-contain border-l border-slate-800 bg-slate-900/40 xl:block">
       <div className="border-b border-slate-800 px-5 py-4">
         <h2 className="font-semibold">AI Intelligence</h2>
 
@@ -57,32 +57,7 @@ function IntelligencePanel({ metadata }) {
 
             <MetadataItem label="Model" value={metadata.model || "Unknown"} />
 
-            <div>
-              <p className="mb-2 text-xs uppercase tracking-wider text-slate-500">
-                Retry triggers
-              </p>
-
-              {metadata.retry_trigger_issues?.length > 0 ? (
-                <div className="space-y-2">
-                  {metadata.retry_trigger_issues.map((issue, index) => (
-                    <div
-                      key={`${issue.code}-${index}`}
-                      className="rounded-lg border border-amber-900/50 bg-amber-950/20 p-3"
-                    >
-                      <p className="text-xs font-medium text-amber-300">
-                        {issue.code}
-                      </p>
-
-                      <p className="mt-1 text-xs text-slate-400">
-                        {issue.matched_text}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-slate-400">None</p>
-              )}
-            </div>
+            <CorrectionDetails metadata={metadata} />
           </>
         )}
       </div>
@@ -127,6 +102,101 @@ function ResponseValidation({ metadata }) {
 
         <p className="mt-2 text-xs leading-5 text-slate-400">{description}</p>
       </div>
+    </div>
+  );
+}
+
+function CorrectionDetails({ metadata }) {
+  const attempts = Number(metadata.attempts);
+
+  const issues = Array.isArray(metadata.retry_trigger_issues)
+    ? metadata.retry_trigger_issues
+    : [];
+
+  const usedFallback = metadata.used_fallback === true;
+
+  const hasRetry = Number.isFinite(attempts) && attempts > 1;
+
+  const hasDetails = hasRetry || issues.length > 0;
+
+  return (
+    <div>
+      <p className="mb-2 text-xs uppercase tracking-wider text-slate-500">
+        Correction details
+      </p>
+
+      {!hasDetails ? (
+        <p className="text-sm text-slate-400">No correction needed</p>
+      ) : (
+        <details className="rounded-lg border border-slate-700 bg-slate-900/60">
+          <summary className="cursor-pointer px-3 py-3 text-sm font-medium text-slate-200">
+            {usedFallback
+              ? "View validation failure details"
+              : "View correction details"}
+          </summary>
+
+          <div className="space-y-4 border-t border-slate-700 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-medium text-slate-200">Attempt 1</p>
+
+              <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300">
+                Rejected
+              </span>
+            </div>
+
+            {issues.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs text-slate-500">
+                  {usedFallback
+                    ? "Validation issues across attempts"
+                    : "Issues detected in attempt 1"}
+                </p>
+
+                {issues.map((issue, index) => (
+                  <div
+                    key={`${issue.code}-${index}`}
+                    className="rounded-lg border border-slate-700 bg-slate-950/60 p-3"
+                  >
+                    <p className="break-words text-xs font-medium text-amber-300">
+                      {issue.code}
+                    </p>
+
+                    <p className="mt-2 break-words text-xs leading-5 text-slate-400">
+                      {issue.matched_text || issue.message}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {hasRetry && (
+              <div className="border-t border-slate-700 pt-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-slate-200">
+                    Attempt 2
+                  </p>
+
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                      usedFallback
+                        ? "bg-rose-500/10 text-rose-300"
+                        : "bg-emerald-500/10 text-emerald-300"
+                    }`}
+                  >
+                    {usedFallback ? "Rejected" : "Passed"}
+                  </span>
+                </div>
+
+                <p className="mt-2 text-xs leading-5 text-slate-400">
+                  {usedFallback
+                    ? "The second response also failed validation. ResolveAI returned its safe fallback response."
+                    : "The corrected response passed validation and was delivered to the customer."}
+                </p>
+              </div>
+            )}
+          </div>
+        </details>
+      )}
     </div>
   );
 }
