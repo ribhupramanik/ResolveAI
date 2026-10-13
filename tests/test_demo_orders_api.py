@@ -237,3 +237,117 @@ def test_demo_order_create_rejects_invalid_statuses(
             db.execute(delete(Customer).where(Customer.id == customer_id))
 
             db.commit()
+
+
+def test_demo_orders_create_rejects_duplicate_order_number():
+    assert engine.url.database == "resolveai_test"
+
+    token = uuid4().hex
+    order_number = f"ORD-{uuid4().int % 10**18:018d}"
+
+    customer_id = None
+
+    try:
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            customer = Customer(
+                customer_code=f"TST-DUP-{token[:12]}",
+                name="Duplicate Order Customer",
+                email=f"duplicate-order-{token}@example.com",
+            )
+
+            db.add(customer)
+            db.flush()
+
+            customer_id = customer.id
+
+            db.commit()
+
+        payload = {
+            "order_number": order_number,
+            "customer_id": customer_id,
+            "status": "processing",
+            "payment_status": "paid",
+            "total_amount": "2499.00",
+            "currency": "INR",
+            "shipping_address": "Kolkata, West Bengal",
+        }
+
+        with TestClient(app) as client:
+            first_response = client.post(
+                "/api/v1/demo/orders",
+                json=payload,
+            )
+
+            assert first_response.status_code == 201, first_response.text
+
+            duplicate_response = client.post(
+                "/api/v1/demo/orders",
+                json={
+                    **payload,
+                    "total_amount": "9999.00",
+                },
+            )
+
+        assert duplicate_response.status_code == 409
+        assert duplicate_response.json()["detail"] == ("Order number already exists.")
+
+        with SessionLocal() as db:
+            stored_orders = db.scalars(
+                select(Order).where(Order.order_number == order_number)
+            ).all()
+
+            assert len(stored_orders) == 1
+            assert stored_orders[0].total_amount == Decimal("2499.00")
+
+    finally:
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            db.execute(delete(Order).where(Order.order_number == order_number))
+
+            if customer_id is not None:
+                db.execute(delete(Customer).where(Customer.id == customer_id))
+
+            db.commit()
+
+
+def test_demo_orders_create_rejects_missing_customer():
+    assert engine.url.database == "resolveai_test"
+
+    order_number = f"ORD-{uuid4().int % 10**18:018d}"
+    missing_customer_id = 2_000_000_000
+
+    with SessionLocal() as db:
+        assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+        assert db.get(Customer, missing_customer_id) is None
+
+    payload = {
+        "order_number": order_number,
+        "customer_id": missing_customer_id,
+        "status": "processing",
+        "payment_status": "paid",
+        "total_amount": "1499.00",
+        "currency": "INR",
+        "shipping_address": "Kolkata, West Bengal",
+    }
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/demo/orders",
+            json=payload,
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Customer not found."
+
+    with SessionLocal() as db:
+        assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+        stored_order = db.scalar(
+            select(Order).where(Order.order_number == order_number)
+        )
+
+        assert stored_order is None
