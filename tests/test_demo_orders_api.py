@@ -351,3 +351,87 @@ def test_demo_orders_create_rejects_missing_customer():
         )
 
         assert stored_order is None
+
+
+def test_demo_orders_update_persists_status_change():
+    assert engine.url.database == "resolveai_test"
+
+    token = uuid4().hex
+    order_number = f"ORD-{uuid4().int % 10**18:018d}"
+
+    customer_id = None
+    order_id = None
+
+    try:
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            customer = Customer(
+                customer_code=f"TST-UPDATE-{token[:12]}",
+                name="Demo Update Customer",
+                email=f"demo-update-{token}@example.com",
+            )
+
+            db.add(customer)
+            db.flush()
+
+            customer_id = customer.id
+
+            order = Order(
+                order_number=order_number,
+                customer_id=customer_id,
+                status="processing",
+                payment_status="paid",
+                total_amount=Decimal("2499.00"),
+                currency="INR",
+                shipping_address="Kolkata, West Bengal",
+            )
+
+            db.add(order)
+            db.flush()
+
+            order_id = order.id
+
+            db.commit()
+
+        with TestClient(app) as client:
+            response = client.patch(
+                f"/api/v1/demo/orders/{order_id}",
+                json={
+                    "status": "shipped",
+                },
+            )
+
+        assert response.status_code == 200, response.text
+
+        data = response.json()
+
+        assert data["id"] == order_id
+        assert data["order_number"] == order_number
+        assert data["status"] == "shipped"
+        assert data["payment_status"] == "paid"
+        assert Decimal(str(data["total_amount"])) == Decimal("2499.00")
+        assert data["customer_id"] == customer_id
+
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            stored_order = db.get(Order, order_id)
+
+            assert stored_order is not None
+            assert stored_order.status == "shipped"
+            assert stored_order.payment_status == "paid"
+            assert stored_order.total_amount == Decimal("2499.00")
+            assert stored_order.order_number == order_number
+
+    finally:
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            if order_id is not None:
+                db.execute(delete(Order).where(Order.id == order_id))
+
+            if customer_id is not None:
+                db.execute(delete(Customer).where(Customer.id == customer_id))
+
+            db.commit()
