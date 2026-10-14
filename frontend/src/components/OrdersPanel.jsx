@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getDemoOrders } from "../api/orders";
+import { deleteDemoOrder, getDemoOrders } from "../api/orders";
 import CreateOrderForm from "./CreateOrderForm";
 import EditOrderForm from "./EditOrderForm";
 import OrderDetails from "./OrderDetails";
@@ -17,6 +17,9 @@ function OrdersPanel({ onTestInChat }) {
   const [editingOrder, setEditingOrder] = useState(null);
   const [updatedOrderNumber, setUpdatedOrderNumber] = useState("");
   const [viewingOrderId, setViewingOrderId] = useState(null);
+  const [deletingOrderId, setDeletingOrderId] = useState(null);
+  const [deleteMessage, setDeleteMessage] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const viewingOrder =
     orders.find((order) => order.id === viewingOrderId) ?? null;
   useEffect(() => {
@@ -107,6 +110,50 @@ function OrdersPanel({ onTestInChat }) {
     }
   }
 
+  async function handleDeleteOrder(order) {
+    if (!order.is_demo_managed || deletingOrderId !== null) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete order ${order.order_number}?\n\nThis action cannot be undone.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingOrderId(order.id);
+      setDeleteMessage("");
+      setDeleteError("");
+
+      await deleteDemoOrder(order.id);
+
+      setOrders((current) => current.filter((item) => item.id !== order.id));
+
+      setViewingOrderId((current) => (current === order.id ? null : current));
+
+      setEditingOrder((current) => (current?.id === order.id ? null : current));
+
+      if (createdOrderNumber === order.order_number) {
+        setCreatedOrderNumber("");
+      }
+
+      if (updatedOrderNumber === order.order_number) {
+        setUpdatedOrderNumber("");
+      }
+
+      setDeleteMessage(`Order ${order.order_number} deleted successfully.`);
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete order.",
+      );
+    } finally {
+      setDeletingOrderId(null);
+    }
+  }
+
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -143,6 +190,24 @@ function OrdersPanel({ onTestInChat }) {
           </button>
         </div>
       </div>
+
+      {deleteMessage && (
+        <div
+          role="status"
+          className="mb-5 rounded-lg border border-slate-700 bg-slate-900 p-4 text-sm text-slate-200"
+        >
+          {deleteMessage}
+        </div>
+      )}
+
+      {deleteError && (
+        <div
+          role="alert"
+          className="mb-5 rounded-lg border border-red-900 bg-red-950/50 p-4 text-sm text-red-300"
+        >
+          {deleteError}
+        </div>
+      )}
 
       {createdOrderNumber && (
         <div className="mb-5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-5">
@@ -382,19 +447,32 @@ function OrdersPanel({ onTestInChat }) {
                     </button>
 
                     {order.is_demo_managed ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingOrder(order);
-                          setViewingOrderId(null);
-                          setShowCreateForm(false);
-                          setCreatedOrderNumber("");
-                          setUpdatedOrderNumber("");
-                        }}
-                        className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-indigo-500 hover:bg-indigo-500/10 hover:text-indigo-300"
-                      >
-                        Edit
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingOrder(order);
+                            setViewingOrderId(null);
+                            setShowCreateForm(false);
+                            setCreatedOrderNumber("");
+                            setUpdatedOrderNumber("");
+                          }}
+                          className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-indigo-500 hover:bg-indigo-500/10 hover:text-indigo-300"
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteOrder(order)}
+                          disabled={deletingOrderId !== null}
+                          className="rounded-lg border border-red-900/70 px-3 py-2 text-xs font-medium text-red-400 transition hover:border-red-500 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {deletingOrderId === order.id
+                            ? "Deleting..."
+                            : "Delete"}
+                        </button>
+                      </div>
                     ) : (
                       <span className="text-xs text-slate-500">Protected</span>
                     )}

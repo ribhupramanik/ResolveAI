@@ -78,3 +78,32 @@ export async function updateDemoOrder(orderId, payload) {
 
   return response.json();
 }
+
+export async function deleteDemoOrder(orderId) {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/demo/orders/${orderId}`,
+    {
+      method: "DELETE",
+    },
+  );
+
+  if (!response.ok) {
+    let errorMessage = "Failed to delete order.";
+
+    try {
+      const data = await response.json();
+
+      if (typeof data.detail === "string") {
+        errorMessage = data.detail;
+      } else if (Array.isArray(data.detail)) {
+        errorMessage = data.detail.map((item) => item.msg).join(", ");
+      }
+    } catch {
+      errorMessage = "Failed to delete order.";
+    }
+
+    throw new Error(errorMessage);
+  }
+
+  return true;
+}
