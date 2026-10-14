@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getDemoOrders } from "../api/orders";
 import CreateOrderForm from "./CreateOrderForm";
 import EditOrderForm from "./EditOrderForm";
+import OrderDetails from "./OrderDetails";
 
 function OrdersPanel({ onTestInChat }) {
   const [orders, setOrders] = useState([]);
@@ -15,6 +16,9 @@ function OrdersPanel({ onTestInChat }) {
   const [copyResult, setCopyResult] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);
   const [updatedOrderNumber, setUpdatedOrderNumber] = useState("");
+  const [viewingOrderId, setViewingOrderId] = useState(null);
+  const viewingOrder =
+    orders.find((order) => order.id === viewingOrderId) ?? null;
   useEffect(() => {
     let cancelled = false;
 
@@ -127,6 +131,7 @@ function OrdersPanel({ onTestInChat }) {
           <button
             type="button"
             onClick={() => {
+              setViewingOrderId(null);
               setEditingOrder(null);
               setUpdatedOrderNumber("");
               setCreatedOrderNumber("");
@@ -192,6 +197,13 @@ function OrdersPanel({ onTestInChat }) {
           order={editingOrder}
           onUpdated={handleOrderUpdated}
           onCancel={() => setEditingOrder(null)}
+        />
+      )}
+
+      {viewingOrder && (
+        <OrderDetails
+          order={viewingOrder}
+          onClose={() => setViewingOrderId(null)}
         />
       )}
 
@@ -349,22 +361,44 @@ function OrdersPanel({ onTestInChat }) {
                   )}
                 </td>
                 <td className="px-5 py-4">
-                  {order.is_demo_managed ? (
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => {
-                        setEditingOrder(order);
+                        setViewingOrderId((current) =>
+                          current === order.id ? null : order.id,
+                        );
+
+                        setEditingOrder(null);
                         setShowCreateForm(false);
-                        setCreatedOrderNumber("");
-                        setUpdatedOrderNumber("");
                       }}
-                      className="rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-200 transition hover:border-indigo-500 hover:bg-indigo-500/10 hover:text-indigo-300"
+                      className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                        viewingOrderId === order.id
+                          ? "border-indigo-500 bg-indigo-500/10 text-indigo-300"
+                          : "border-slate-700 text-slate-200 hover:border-indigo-500 hover:text-indigo-300"
+                      }`}
                     >
-                      Edit
+                      {viewingOrderId === order.id ? "Hide" : "View"}
                     </button>
-                  ) : (
-                    <span className="text-xs text-slate-500">Protected</span>
-                  )}
+
+                    {order.is_demo_managed ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingOrder(order);
+                          setViewingOrderId(null);
+                          setShowCreateForm(false);
+                          setCreatedOrderNumber("");
+                          setUpdatedOrderNumber("");
+                        }}
+                        className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-indigo-500 hover:bg-indigo-500/10 hover:text-indigo-300"
+                      >
+                        Edit
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-500">Protected</span>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
