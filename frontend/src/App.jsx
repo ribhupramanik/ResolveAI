@@ -32,6 +32,8 @@ function App() {
 
   const [actionLoading, setActionLoading] = useState(false);
 
+  const [activeView, setActiveView] = useState("chat");
+
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -231,29 +233,93 @@ function App() {
   }
 
   return (
-    <main className="h-screen overflow-hidden bg-slate-950 text-slate-100">
-      <div className="flex h-full">
-        <ConversationSidebar
-          conversations={conversations}
-          activeConversationId={activeConversationId}
-          onSelectConversation={setActiveConversationId}
-          onNewConversation={handleNewConversation}
-        />
+    <main className="flex h-screen flex-col overflow-hidden bg-slate-950 text-slate-100">
+      <header className="flex shrink-0 items-center justify-between border-b border-slate-800 px-6 py-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-lg font-bold text-white">
+            R
+          </div>
 
-        <ChatPanel
-          messages={messages}
-          message={message}
-          setMessage={setMessage}
-          loading={loading}
-          error={error}
-          onSubmit={handleSubmit}
-          pendingAction={pendingAction}
-          actionLoading={actionLoading}
-          onPendingActionDecision={handlePendingActionDecision}
-        />
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight">ResolveAI</h1>
+            <p className="text-xs text-slate-400">
+              Intelligent Customer Support
+            </p>
+          </div>
+        </div>
 
-        <IntelligencePanel metadata={metadata} />
-      </div>
+        <nav className="flex items-center gap-2" aria-label="Main navigation">
+          <button
+            type="button"
+            aria-pressed={activeView === "chat"}
+            onClick={() => setActiveView("chat")}
+            className={`rounded-lg px-5 py-2 text-sm font-medium transition-colors ${
+              activeView === "chat"
+                ? "bg-indigo-600 text-white"
+                : "text-slate-400 hover:bg-slate-800 hover:text-white"
+            }`}
+          >
+            Chat
+          </button>
+
+          <button
+            type="button"
+            aria-pressed={activeView === "orders"}
+            onClick={() => setActiveView("orders")}
+            className={`rounded-lg px-5 py-2 text-sm font-medium transition-colors ${
+              activeView === "orders"
+                ? "bg-indigo-600 text-white"
+                : "text-slate-400 hover:bg-slate-800 hover:text-white"
+            }`}
+          >
+            Orders
+          </button>
+        </nav>
+      </header>
+
+      {activeView === "chat" ? (
+        <div className="flex min-h-0 flex-1">
+          <ConversationSidebar
+            conversations={conversations}
+            activeConversationId={activeConversationId}
+            onSelectConversation={setActiveConversationId}
+            onNewConversation={handleNewConversation}
+          />
+
+          <ChatPanel
+            messages={messages}
+            message={message}
+            setMessage={setMessage}
+            loading={loading}
+            error={error}
+            onSubmit={handleSubmit}
+            pendingAction={pendingAction}
+            actionLoading={actionLoading}
+            onPendingActionDecision={handlePendingActionDecision}
+          />
+
+          <IntelligencePanel metadata={metadata} />
+        </div>
+      ) : (
+        <section className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
+          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-600/15 text-3xl text-indigo-400">
+            📦
+          </div>
+
+          <h2 className="mb-3 text-2xl font-semibold">
+            Order Scenario Manager
+          </h2>
+
+          <p className="max-w-lg text-sm leading-6 text-slate-400">
+            Create, manage, and test customer order scenarios directly within
+            ResolveAI.
+          </p>
+
+          <p className="mt-4 text-xs text-indigo-400">
+            Order Management Interface Coming Next
+          </p>
+        </section>
+      )}
     </main>
   );
 }
