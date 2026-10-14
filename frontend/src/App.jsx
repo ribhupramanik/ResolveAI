@@ -11,6 +11,7 @@ import {
   sendConversationMessage,
 } from "./api/conversations";
 
+import OrdersPanel from "./components/OrdersPanel";
 import ChatPanel from "./components/ChatPanel";
 import ConversationSidebar from "./components/ConversationSidebar";
 import IntelligencePanel from "./components/IntelligencePanel";
@@ -301,24 +302,7 @@ function App() {
           <IntelligencePanel metadata={metadata} />
         </div>
       ) : (
-        <section className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
-          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-600/15 text-3xl text-indigo-400">
-            📦
-          </div>
-
-          <h2 className="mb-3 text-2xl font-semibold">
-            Order Scenario Manager
-          </h2>
-
-          <p className="max-w-lg text-sm leading-6 text-slate-400">
-            Create, manage, and test customer order scenarios directly within
-            ResolveAI.
-          </p>
-
-          <p className="mt-4 text-xs text-indigo-400">
-            Order Management Interface Coming Next
-          </p>
-        </section>
+        <OrdersPanel />
       )}
     </main>
   );

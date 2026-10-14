@@ -1169,3 +1169,90 @@ def test_demo_orders_delete_rejects_missing_order():
         assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
 
         assert db.get(Order, missing_order_id) is None
+
+
+def test_demo_orders_create_automatically_creates_customer():
+    assert engine.url.database == "resolveai_test"
+
+    order_number = f"ORD-{uuid4().int % 10**18:018d}"
+
+    order_id = None
+    customer_id = None
+
+    try:
+        payload = {
+            "order_number": order_number,
+            "status": "processing",
+            "payment_status": "paid",
+            "total_amount": "2499.00",
+            "currency": "INR",
+            "shipping_address": "Kolkata, West Bengal",
+        }
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/demo/orders",
+                json=payload,
+            )
+
+        assert response.status_code == 201, response.text
+
+        data = response.json()
+
+        order_id = data["id"]
+        customer_id = data["customer_id"]
+
+        assert data["order_number"] == order_number
+        assert data["is_demo_managed"] is True
+        assert data["customer_name"]
+
+        with SessionLocal() as db:
+            assert (
+                db.scalar(text("SELECT current_database()"))
+                == "resolveai_test"
+            )
+
+            stored_order = db.get(Order, order_id)
+            stored_customer = db.get(Customer, customer_id)
+
+            assert stored_order is not None
+            assert stored_customer is not None
+
+            assert stored_order.customer_id == stored_customer.id
+            assert stored_order.is_demo_managed is True
+
+            assert stored_customer.name == data["customer_name"]
+            assert stored_customer.customer_code
+            assert stored_customer.email
+
+    finally:
+        with SessionLocal() as db:
+            assert (
+                db.scalar(text("SELECT current_database()"))
+                == "resolveai_test"
+            )
+
+            if order_id is None:
+                existing_order = db.scalar(
+                    select(Order).where(
+                        Order.order_number == order_number
+                    )
+                )
+
+                if existing_order is not None:
+                    order_id = existing_order.id
+                    customer_id = existing_order.customer_id
+
+            if order_id is not None:
+                db.execute(
+                    delete(Order).where(Order.id == order_id)
+                )
+
+            if customer_id is not None:
+                db.execute(
+                    delete(Customer).where(
+                        Customer.id == customer_id
+                    )
+                )
+
+            db.commit()
