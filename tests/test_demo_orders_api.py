@@ -1035,3 +1035,112 @@ def test_demo_orders_delete_rejects_order_with_action_history(
                 db.execute(delete(Customer).where(Customer.id == customer_id))
 
             db.commit()
+
+
+@pytest.mark.parametrize(
+    "refund_status",
+    [
+        "processing",
+        "completed",
+        "failed",
+    ],
+)
+def test_demo_orders_delete_rejects_order_with_refund_history(
+    refund_status,
+):
+    assert engine.url.database == "resolveai_test"
+
+    token = uuid4().hex
+    order_number = f"ORD-{uuid4().int % 10**18:018d}"
+
+    customer_id = None
+    order_id = None
+    refund_id = None
+
+    try:
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            customer = Customer(
+                customer_code=f"TST-DRFD-{token[:12]}",
+                name="Refund Deletion Test Customer",
+                email=f"refund-delete-{token}@example.com",
+            )
+
+            db.add(customer)
+            db.flush()
+
+            customer_id = customer.id
+
+            order = Order(
+                order_number=order_number,
+                customer_id=customer_id,
+                status="processing",
+                payment_status="paid",
+                total_amount=Decimal("2499.00"),
+                currency="INR",
+                shipping_address="Kolkata, West Bengal",
+                is_demo_managed=True,
+            )
+
+            db.add(order)
+            db.flush()
+
+            order_id = order.id
+
+            refund = Refund(
+                refund_number=f"REF-{token.upper()}",
+                order_id=order_id,
+                status=refund_status,
+                amount=Decimal("2499.00"),
+                currency="INR",
+                initiated_at=datetime.now(UTC),
+            )
+
+            db.add(refund)
+            db.flush()
+
+            refund_id = refund.id
+
+            db.commit()
+
+        with TestClient(app) as client:
+            response = client.delete(f"/api/v1/demo/orders/{order_id}")
+
+        assert response.status_code == 409, response.text
+
+        assert response.json()["detail"] == (
+            "This order has refund history and cannot be deleted."
+        )
+
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            stored_order = db.get(Order, order_id)
+            stored_refund = db.get(Refund, refund_id)
+
+            assert stored_order is not None
+            assert stored_order.is_demo_managed is True
+            assert stored_order.order_number == order_number
+            assert stored_order.status == "processing"
+            assert stored_order.total_amount == Decimal("2499.00")
+
+            assert stored_refund is not None
+            assert stored_refund.order_id == order_id
+            assert stored_refund.status == refund_status
+            assert stored_refund.amount == Decimal("2499.00")
+
+    finally:
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            if refund_id is not None:
+                db.execute(delete(Refund).where(Refund.id == refund_id))
+
+            if order_id is not None:
+                db.execute(delete(Order).where(Order.id == order_id))
+
+            if customer_id is not None:
+                db.execute(delete(Customer).where(Customer.id == customer_id))
+
+            db.commit()
