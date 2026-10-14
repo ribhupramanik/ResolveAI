@@ -276,6 +276,8 @@ function OrdersPanel({ onTestInChat }) {
                         </svg>
                       )}
                     </button>
+
+                    
                   </div>
 
                   {copyResult?.orderNumber === order.order_number &&
