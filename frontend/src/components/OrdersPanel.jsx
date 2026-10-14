@@ -11,6 +11,7 @@ function OrdersPanel({ onTestInChat }) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [createdOrderNumber, setCreatedOrderNumber] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
+  const [copyResult, setCopyResult] = useState(null);
   useEffect(() => {
     let cancelled = false;
 
@@ -66,6 +67,7 @@ function OrdersPanel({ onTestInChat }) {
   function handleOrderCreated(order) {
     setCreatedOrderNumber(order.order_number);
     setCopyMessage("");
+    setCopyResult(null);
     setShowCreateForm(false);
     handleRefresh();
   }
@@ -75,12 +77,23 @@ function OrdersPanel({ onTestInChat }) {
       await navigator.clipboard.writeText(orderNumber);
 
       setCopyMessage("Order number copied to clipboard.");
+
+      setCopyResult({
+        orderNumber,
+        success: true,
+      });
     } catch {
       setCopyMessage(
         "Unable to copy automatically. Please select and copy the order number.",
       );
+
+      setCopyResult({
+        orderNumber,
+        success: false,
+      });
     }
   }
+
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -206,8 +219,72 @@ function OrdersPanel({ onTestInChat }) {
                 key={order.id}
                 className="bg-slate-950 transition hover:bg-slate-900/70"
               >
-                <td className="px-5 py-4 font-medium text-indigo-400">
-                  {order.order_number}
+                <td className="px-5 py-4">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="min-w-0 break-all font-medium text-indigo-400">
+                      {order.order_number}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopyOrderNumber(order.order_number)}
+                      title={
+                        copyResult?.orderNumber === order.order_number &&
+                        copyResult.success
+                          ? "Copied!"
+                          : "Copy order number"
+                      }
+                      aria-label={`Copy order number ${order.order_number}`}
+                      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors ${
+                        copyResult?.orderNumber === order.order_number &&
+                        copyResult.success
+                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                          : "border-slate-700 bg-slate-800/50 text-slate-400 hover:border-indigo-500 hover:bg-indigo-500/10 hover:text-indigo-300"
+                      }`}
+                    >
+                      {copyResult?.orderNumber === order.order_number &&
+                      copyResult.success ? (
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="15"
+                          height="15"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M20 6 9 17l-5-5" />
+                        </svg>
+                      ) : (
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="15"
+                          height="15"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <rect x="8" y="8" width="13" height="13" rx="2" />
+                          <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+
+                  {copyResult?.orderNumber === order.order_number &&
+                    !copyResult.success && (
+                      <p role="alert" className="mt-2 text-xs text-red-400">
+                        Unable to copy automatically. Select the order number to
+                        copy it.
+                      </p>
+                    )}
                 </td>
 
                 <td className="px-5 py-4 text-slate-200">
