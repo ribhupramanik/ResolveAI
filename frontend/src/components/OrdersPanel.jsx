@@ -10,6 +10,7 @@ function OrdersPanel() {
   const [reloadKey, setReloadKey] = useState(0);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [createdOrderNumber, setCreatedOrderNumber] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
   useEffect(() => {
     let cancelled = false;
 
@@ -64,8 +65,21 @@ function OrdersPanel() {
 
   function handleOrderCreated(order) {
     setCreatedOrderNumber(order.order_number);
+    setCopyMessage("");
     setShowCreateForm(false);
     handleRefresh();
+  }
+
+  async function handleCopyOrderNumber(orderNumber) {
+    try {
+      await navigator.clipboard.writeText(orderNumber);
+
+      setCopyMessage("Order number copied to clipboard.");
+    } catch {
+      setCopyMessage(
+        "Unable to copy automatically. Please select and copy the order number.",
+      );
+    }
   }
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
@@ -102,21 +116,34 @@ function OrdersPanel() {
       </div>
 
       {createdOrderNumber && (
-        <div
-          role="status"
-          className="mb-5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 p-4"
-        >
-          <p className="text-sm font-medium text-indigo-300">
+        <div className="mb-5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-5">
+          <p className="text-sm font-semibold text-indigo-300">
             Order created successfully!
           </p>
 
           <p className="mt-2 text-sm text-slate-300">
-            Your generated order number is:
+            Your generated order number:
           </p>
 
-          <p className="mt-1 font-mono text-lg font-semibold text-white">
+          <p className="mt-2 break-all font-mono text-xl font-semibold text-white">
             {createdOrderNumber}
           </p>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => handleCopyOrderNumber(createdOrderNumber)}
+              className="rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-4 py-2.5 text-sm font-medium text-indigo-300 transition hover:bg-indigo-500/20"
+            >
+              Copy Order Number
+            </button>
+          </div>
+
+          {copyMessage && (
+            <p role="status" className="mt-3 text-xs text-slate-300">
+              {copyMessage}
+            </p>
+          )}
         </div>
       )}
 
