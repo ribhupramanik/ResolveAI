@@ -67,6 +67,7 @@ def list_demo_orders(
             carrier=order.carrier,
             tracking_number=order.tracking_number,
             estimated_delivery=order.estimated_delivery,
+            is_demo_managed=order.is_demo_managed,
             created_at=order.created_at,
             updated_at=order.updated_at,
         )
@@ -137,6 +138,7 @@ def create_demo_order(
         carrier=order.carrier,
         tracking_number=order.tracking_number,
         estimated_delivery=order.estimated_delivery,
+        is_demo_managed=order.is_demo_managed,
         created_at=order.created_at,
         updated_at=order.updated_at,
     )
@@ -213,6 +215,7 @@ def update_demo_order(
         carrier=order.carrier,
         tracking_number=order.tracking_number,
         estimated_delivery=order.estimated_delivery,
+        is_demo_managed=order.is_demo_managed,
         created_at=order.created_at,
         updated_at=order.updated_at,
     )

@@ -810,6 +810,8 @@ def test_demo_orders_delete_removes_created_order():
 
             assert create_response.status_code == 201, create_response.text
 
+            assert create_response.json()["is_demo_managed"] is True
+
             order_id = create_response.json()["id"]
 
             delete_response = client.delete(f"/api/v1/demo/orders/{order_id}")

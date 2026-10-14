@@ -23,6 +23,7 @@ PaymentStatus = Literal[
 class DemoOrderResponse(BaseModel):
     id: int
     order_number: str
+    is_demo_managed: bool
 
     customer_id: int
     customer_name: str
