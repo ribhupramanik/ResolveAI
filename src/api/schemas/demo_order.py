@@ -45,7 +45,8 @@ class DemoOrderResponse(BaseModel):
 
 
 class DemoOrderCreate(BaseModel):
-    order_number: str = Field(
+    order_number: str | None = Field(
+        default=None,
         min_length=5,
         max_length=30,
         pattern=r"^ORD-[0-9]+$",

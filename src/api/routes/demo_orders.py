@@ -1,3 +1,4 @@
+from secrets import randbelow
 from typing import Annotated
 from uuid import uuid4
 
@@ -86,80 +87,107 @@ def create_demo_order(
     db: DatabaseDependency,
 ) -> DemoOrderResponse:
 
-    existing_order = db.scalar(
-        select(Order.id).where(Order.order_number == payload.order_number)
-    )
-
-    if existing_order is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Order number already exists.",
+    if payload.order_number is not None:
+        existing_order = db.scalar(
+            select(Order.id).where(Order.order_number == payload.order_number)
         )
 
-    customer = None
+        if existing_order is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Order number already exists.",
+            )
 
     if payload.customer_id is not None:
-        customer = db.get(
+        existing_customer = db.get(
             Customer,
             payload.customer_id,
         )
 
-        if customer is None:
+        if existing_customer is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Customer not found.",
             )
 
-    try:
-        if customer is None:
-            token = uuid4().hex
-
-            customer = Customer(
-                customer_code=f"DEMO-{token[:12].upper()}",
-                name=f"Demo Customer {token[:8].upper()}",
-                email=f"demo-{token}@example.invalid",
-            )
-
-            db.add(customer)
-            db.flush()
-
-        order_data = payload.model_dump(exclude={"customer_id"})
-
-        order = Order(
-            **order_data,
-            customer_id=customer.id,
-            is_demo_managed=True,
+    for attempt in range(5):
+        order_number = (
+            payload.order_number
+            if payload.order_number is not None
+            else f"ORD-{randbelow(10**20):020d}"
         )
 
-        db.add(order)
-        db.commit()
+        try:
+            if payload.customer_id is None:
+                token = uuid4().hex
 
-    except IntegrityError as exc:
-        db.rollback()
+                customer = Customer(
+                    customer_code=f"DEMO-{token[:12].upper()}",
+                    name=f"Demo Customer {token[:8].upper()}",
+                    email=f"demo-{token}@example.invalid",
+                )
 
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Order or customer already exists.",
-        ) from exc
+                db.add(customer)
+                db.flush()
 
-    db.refresh(order)
+            else:
+                customer = db.get(
+                    Customer,
+                    payload.customer_id,
+                )
 
-    return DemoOrderResponse(
-        id=order.id,
-        order_number=order.order_number,
-        customer_id=order.customer_id,
-        customer_name=customer.name,
-        is_demo_managed=order.is_demo_managed,
-        status=order.status,
-        payment_status=order.payment_status,
-        total_amount=order.total_amount,
-        currency=order.currency,
-        shipping_address=order.shipping_address,
-        carrier=order.carrier,
-        tracking_number=order.tracking_number,
-        estimated_delivery=order.estimated_delivery,
-        created_at=order.created_at,
-        updated_at=order.updated_at,
+                if customer is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Customer not found.",
+                    )
+
+            order_data = payload.model_dump(exclude={"customer_id", "order_number"})
+
+            order = Order(
+                **order_data,
+                order_number=order_number,
+                customer_id=customer.id,
+                is_demo_managed=True,
+            )
+
+            db.add(order)
+            db.commit()
+
+        except IntegrityError as exc:
+            db.rollback()
+
+            if payload.order_number is not None or attempt == 4:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Order or customer already exists.",
+                ) from exc
+
+            continue
+
+        db.refresh(order)
+
+        return DemoOrderResponse(
+            id=order.id,
+            order_number=order.order_number,
+            customer_id=order.customer_id,
+            customer_name=customer.name,
+            is_demo_managed=order.is_demo_managed,
+            status=order.status,
+            payment_status=order.payment_status,
+            total_amount=order.total_amount,
+            currency=order.currency,
+            shipping_address=order.shipping_address,
+            carrier=order.carrier,
+            tracking_number=order.tracking_number,
+            estimated_delivery=order.estimated_delivery,
+            created_at=order.created_at,
+            updated_at=order.updated_at,
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail="Unable to generate a unique order number.",
     )
 
 
