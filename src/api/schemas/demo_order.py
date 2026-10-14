@@ -51,7 +51,7 @@ class DemoOrderCreate(BaseModel):
         pattern=r"^ORD-[0-9]+$",
     )
 
-    customer_id: int = Field(gt=0)
+    customer_id: int | None = Field(default=None, gt=0)
 
     status: OrderStatus
 

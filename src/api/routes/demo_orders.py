@@ -1,4 +1,5 @@
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -85,17 +86,6 @@ def create_demo_order(
     db: DatabaseDependency,
 ) -> DemoOrderResponse:
 
-    customer = db.get(
-        Customer,
-        payload.customer_id,
-    )
-
-    if customer is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Customer not found.",
-        )
-
     existing_order = db.scalar(
         select(Order.id).where(Order.order_number == payload.order_number)
     )
@@ -106,12 +96,41 @@ def create_demo_order(
             detail="Order number already exists.",
         )
 
-    order = Order(
-        **payload.model_dump(),
-        is_demo_managed=True,
-    )
+    customer = None
+
+    if payload.customer_id is not None:
+        customer = db.get(
+            Customer,
+            payload.customer_id,
+        )
+
+        if customer is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Customer not found.",
+            )
 
     try:
+        if customer is None:
+            token = uuid4().hex
+
+            customer = Customer(
+                customer_code=f"DEMO-{token[:12].upper()}",
+                name=f"Demo Customer {token[:8].upper()}",
+                email=f"demo-{token}@example.invalid",
+            )
+
+            db.add(customer)
+            db.flush()
+
+        order_data = payload.model_dump(exclude={"customer_id"})
+
+        order = Order(
+            **order_data,
+            customer_id=customer.id,
+            is_demo_managed=True,
+        )
+
         db.add(order)
         db.commit()
 
@@ -120,7 +139,7 @@ def create_demo_order(
 
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Order creation violates a database constraint.",
+            detail="Order or customer already exists.",
         ) from exc
 
     db.refresh(order)
@@ -130,6 +149,7 @@ def create_demo_order(
         order_number=order.order_number,
         customer_id=order.customer_id,
         customer_name=customer.name,
+        is_demo_managed=order.is_demo_managed,
         status=order.status,
         payment_status=order.payment_status,
         total_amount=order.total_amount,
@@ -138,7 +158,6 @@ def create_demo_order(
         carrier=order.carrier,
         tracking_number=order.tracking_number,
         estimated_delivery=order.estimated_delivery,
-        is_demo_managed=order.is_demo_managed,
         created_at=order.created_at,
         updated_at=order.updated_at,
     )

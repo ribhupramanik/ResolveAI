@@ -1207,10 +1207,7 @@ def test_demo_orders_create_automatically_creates_customer():
         assert data["customer_name"]
 
         with SessionLocal() as db:
-            assert (
-                db.scalar(text("SELECT current_database()"))
-                == "resolveai_test"
-            )
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
 
             stored_order = db.get(Order, order_id)
             stored_customer = db.get(Customer, customer_id)
@@ -1227,16 +1224,11 @@ def test_demo_orders_create_automatically_creates_customer():
 
     finally:
         with SessionLocal() as db:
-            assert (
-                db.scalar(text("SELECT current_database()"))
-                == "resolveai_test"
-            )
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
 
             if order_id is None:
                 existing_order = db.scalar(
-                    select(Order).where(
-                        Order.order_number == order_number
-                    )
+                    select(Order).where(Order.order_number == order_number)
                 )
 
                 if existing_order is not None:
@@ -1244,15 +1236,74 @@ def test_demo_orders_create_automatically_creates_customer():
                     customer_id = existing_order.customer_id
 
             if order_id is not None:
-                db.execute(
-                    delete(Order).where(Order.id == order_id)
-                )
+                db.execute(delete(Order).where(Order.id == order_id))
 
             if customer_id is not None:
-                db.execute(
-                    delete(Customer).where(
-                        Customer.id == customer_id
-                    )
-                )
+                db.execute(delete(Customer).where(Customer.id == customer_id))
+
+            db.commit()
+
+
+def test_demo_orders_create_automatically_generates_order_number():
+    assert engine.url.database == "resolveai_test"
+
+    order_id = None
+    customer_id = None
+
+    try:
+        payload = {
+            "status": "processing",
+            "payment_status": "paid",
+            "total_amount": "2499.00",
+            "currency": "INR",
+            "shipping_address": "Kolkata, West Bengal",
+        }
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/demo/orders",
+                json=payload,
+            )
+
+        data = response.json()
+
+        order_id = data.get("id")
+        customer_id = data.get("customer_id")
+
+        assert response.status_code == 201, response.text
+
+        order_number = data["order_number"]
+
+        assert order_number.startswith("ORD-")
+        assert order_number.removeprefix("ORD-").isdigit()
+        assert len(order_number) <= 30
+
+        assert data["is_demo_managed"] is True
+        assert data["customer_name"]
+
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            stored_order = db.get(Order, order_id)
+            stored_customer = db.get(Customer, customer_id)
+
+            assert stored_order is not None
+            assert stored_customer is not None
+
+            assert stored_order.order_number == order_number
+            assert stored_order.customer_id == customer_id
+            assert stored_order.is_demo_managed is True
+
+            assert stored_customer.name == data["customer_name"]
+
+    finally:
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            if order_id is not None:
+                db.execute(delete(Order).where(Order.id == order_id))
+
+            if customer_id is not None:
+                db.execute(delete(Customer).where(Customer.id == customer_id))
 
             db.commit()
