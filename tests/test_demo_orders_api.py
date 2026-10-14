@@ -1307,3 +1307,88 @@ def test_demo_orders_create_automatically_generates_order_number():
                 db.execute(delete(Customer).where(Customer.id == customer_id))
 
             db.commit()
+
+
+def test_demo_orders_auto_generated_numbers_are_unique():
+    assert engine.url.database == "resolveai_test"
+
+    created_orders = []
+
+    payload = {
+        "status": "processing",
+        "payment_status": "paid",
+        "total_amount": "2499.00",
+        "currency": "INR",
+        "shipping_address": "Kolkata, West Bengal",
+    }
+
+    try:
+        with TestClient(app) as client:
+            for _ in range(2):
+                response = client.post(
+                    "/api/v1/demo/orders",
+                    json=payload,
+                )
+
+                assert response.status_code == 201, response.text
+
+                data = response.json()
+
+                created_orders.append(
+                    {
+                        "id": data["id"],
+                        "customer_id": data["customer_id"],
+                        "order_number": data["order_number"],
+                    }
+                )
+
+        assert len(created_orders) == 2
+
+        first_order = created_orders[0]
+        second_order = created_orders[1]
+
+        assert first_order["id"] != second_order["id"]
+
+        assert first_order["order_number"] != second_order["order_number"]
+
+        assert first_order["customer_id"] != second_order["customer_id"]
+
+        for order in created_orders:
+            assert order["order_number"].startswith("ORD-")
+            assert order["order_number"][4:].isdigit()
+            assert len(order["order_number"]) <= 30
+
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            for created_order in created_orders:
+                stored_order = db.get(
+                    Order,
+                    created_order["id"],
+                )
+
+                assert stored_order is not None
+                assert stored_order.order_number == created_order["order_number"]
+                assert stored_order.is_demo_managed is True
+
+                stored_customer = db.get(
+                    Customer,
+                    created_order["customer_id"],
+                )
+
+                assert stored_customer is not None
+                assert stored_order.customer_id == stored_customer.id
+
+    finally:
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            for created_order in created_orders:
+                db.execute(delete(Order).where(Order.id == created_order["id"]))
+
+            for created_order in created_orders:
+                db.execute(
+                    delete(Customer).where(Customer.id == created_order["customer_id"])
+                )
+
+            db.commit()
