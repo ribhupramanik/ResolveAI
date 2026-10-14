@@ -840,3 +840,76 @@ def test_demo_orders_delete_removes_created_order():
                 db.execute(delete(Customer).where(Customer.id == customer_id))
 
             db.commit()
+
+
+def test_demo_orders_delete_rejects_seeded_order():
+    assert engine.url.database == "resolveai_test"
+
+    token = uuid4().hex
+    order_number = f"ORD-{uuid4().int % 10**18:018d}"
+
+    customer_id = None
+    order_id = None
+
+    try:
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            customer = Customer(
+                customer_code=f"TST-SEED-{token[:12]}",
+                name="Protected Seeded Customer",
+                email=f"protected-seed-{token}@example.com",
+            )
+
+            db.add(customer)
+            db.flush()
+
+            customer_id = customer.id
+
+            order = Order(
+                order_number=order_number,
+                customer_id=customer_id,
+                status="processing",
+                payment_status="paid",
+                total_amount=Decimal("2499.00"),
+                currency="INR",
+                shipping_address="Kolkata, West Bengal",
+                is_demo_managed=False,
+            )
+
+            db.add(order)
+            db.flush()
+
+            order_id = order.id
+
+            db.commit()
+
+        with TestClient(app) as client:
+            response = client.delete(f"/api/v1/demo/orders/{order_id}")
+
+        assert response.status_code == 403, response.text
+
+        assert response.json()["detail"] == ("Only demo-managed orders can be deleted.")
+
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            stored_order = db.get(Order, order_id)
+
+            assert stored_order is not None
+            assert stored_order.order_number == order_number
+            assert stored_order.is_demo_managed is False
+            assert stored_order.status == "processing"
+            assert stored_order.total_amount == Decimal("2499.00")
+
+    finally:
+        with SessionLocal() as db:
+            assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+            if order_id is not None:
+                db.execute(delete(Order).where(Order.id == order_id))
+
+            if customer_id is not None:
+                db.execute(delete(Customer).where(Customer.id == customer_id))
+
+            db.commit()
