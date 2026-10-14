@@ -1144,3 +1144,26 @@ def test_demo_orders_delete_rejects_order_with_refund_history(
                 db.execute(delete(Customer).where(Customer.id == customer_id))
 
             db.commit()
+
+
+def test_demo_orders_delete_rejects_missing_order():
+    assert engine.url.database == "resolveai_test"
+
+    missing_order_id = 2_000_000_000
+
+    with SessionLocal() as db:
+        assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+        assert db.get(Order, missing_order_id) is None
+
+    with TestClient(app) as client:
+        response = client.delete(f"/api/v1/demo/orders/{missing_order_id}")
+
+    assert response.status_code == 404, response.text
+
+    assert response.json() == {"detail": "Order not found."}
+
+    with SessionLocal() as db:
+        assert db.scalar(text("SELECT current_database()")) == "resolveai_test"
+
+        assert db.get(Order, missing_order_id) is None
