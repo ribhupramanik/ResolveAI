@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getDemoOrders } from "../api/orders";
+import CreateOrderForm from "./CreateOrderForm";
 
 function OrdersPanel() {
   const [orders, setOrders] = useState([]);
@@ -7,7 +8,8 @@ function OrdersPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
-
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [createdOrderNumber, setCreatedOrderNumber] = useState("");
   useEffect(() => {
     let cancelled = false;
 
@@ -60,8 +62,13 @@ function OrdersPanel() {
     )}`;
   }
 
+  function handleOrderCreated(order) {
+    setCreatedOrderNumber(order.order_number);
+    setShowCreateForm(false);
+    handleRefresh();
+  }
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden p-6">
+    <section className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">Order Scenario Manager</h2>
@@ -71,15 +78,54 @@ function OrdersPanel() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleRefresh}
-          disabled={loading}
-          className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
-        >
-          {loading ? "Loading..." : "Refresh"}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={loading}
+            className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+          >
+            {loading ? "Loading..." : "Refresh"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setCreatedOrderNumber("");
+              setShowCreateForm((current) => !current);
+            }}
+            className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-indigo-500"
+          >
+            {showCreateForm ? "Close Form" : "+ Create Order"}
+          </button>
+        </div>
       </div>
+
+      {createdOrderNumber && (
+        <div
+          role="status"
+          className="mb-5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 p-4"
+        >
+          <p className="text-sm font-medium text-indigo-300">
+            Order created successfully!
+          </p>
+
+          <p className="mt-2 text-sm text-slate-300">
+            Your generated order number is:
+          </p>
+
+          <p className="mt-1 font-mono text-lg font-semibold text-white">
+            {createdOrderNumber}
+          </p>
+        </div>
+      )}
+
+      {showCreateForm && (
+        <CreateOrderForm
+          onCreated={handleOrderCreated}
+          onCancel={() => setShowCreateForm(false)}
+        />
+      )}
 
       <div className="mb-5">
         <input
@@ -101,7 +147,7 @@ function OrdersPanel() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-slate-800">
+      <div className="min-h-[260px] flex-1 overflow-auto rounded-xl border border-slate-800">
         <table className="w-full min-w-[850px] border-collapse text-left text-sm">
           <thead className="sticky top-0 z-10 bg-slate-900 text-slate-400">
             <tr>
