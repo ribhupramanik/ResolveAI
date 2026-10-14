@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createDemoOrder } from "../api/orders";
 
 const initialForm = {
@@ -21,6 +21,8 @@ function CreateOrderForm({ onCreated, onCancel }) {
 
   const showEstimatedDelivery = form.status !== "cancelled";
 
+  const estimatedDeliveryRef = useRef(null);
+
   function handleChange(event) {
     const { name, value } = event.target;
 
@@ -28,6 +30,24 @@ function CreateOrderForm({ onCreated, onCancel }) {
       ...current,
       [name]: value,
     }));
+  }
+
+  function openEstimatedDeliveryPicker() {
+    const input = estimatedDeliveryRef.current;
+
+    if (!input) {
+      return;
+    }
+
+    try {
+      if (typeof input.showPicker === "function") {
+        input.showPicker();
+      } else {
+        input.focus();
+      }
+    } catch {
+      input.focus();
+    }
   }
 
   async function handleSubmit(event) {
@@ -288,19 +308,32 @@ function CreateOrderForm({ onCreated, onCancel }) {
               </span>
             </label>
 
-            <input
-              id="estimated-delivery"
-              type="date"
-              name="estimated_delivery"
-              value={form.estimated_delivery}
-              onChange={handleChange}
-              disabled={submitting}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-indigo-500"
-            />
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                ref={estimatedDeliveryRef}
+                id="estimated-delivery"
+                type="date"
+                name="estimated_delivery"
+                value={form.estimated_delivery}
+                onChange={handleChange}
+                onClick={openEstimatedDeliveryPicker}
+                disabled={submitting}
+                className="min-w-0 flex-1 cursor-pointer rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 [color-scheme:dark]"
+              />
+
+              <button
+                type="button"
+                onClick={openEstimatedDeliveryPicker}
+                disabled={submitting}
+                className="rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-5 py-3 text-sm font-medium text-indigo-300 transition hover:bg-indigo-500/20 disabled:opacity-50"
+              >
+                Select Date
+              </button>
+            </div>
 
             <p className="mt-2 text-xs text-slate-500">
-              Leave this blank to test scenarios where no delivery estimate is
-              available.
+              Select an estimated delivery date from the calendar, or leave it
+              blank to test scenarios without a delivery estimate.
             </p>
           </div>
         )}
