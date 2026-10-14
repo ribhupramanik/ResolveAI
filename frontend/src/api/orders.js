@@ -45,3 +45,36 @@ export async function createDemoOrder(payload) {
 
   return response.json();
 }
+
+export async function updateDemoOrder(orderId, payload) {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/demo/orders/${orderId}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+
+  if (!response.ok) {
+    let errorMessage = "Failed to update order.";
+
+    try {
+      const data = await response.json();
+
+      if (typeof data.detail === "string") {
+        errorMessage = data.detail;
+      } else if (Array.isArray(data.detail)) {
+        errorMessage = data.detail.map((item) => item.msg).join(", ");
+      }
+    } catch {
+      errorMessage = "Failed to update order.";
+    }
+
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}

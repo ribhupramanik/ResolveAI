@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getDemoOrders } from "../api/orders";
 import CreateOrderForm from "./CreateOrderForm";
+import EditOrderForm from "./EditOrderForm";
 
 function OrdersPanel({ onTestInChat }) {
   const [orders, setOrders] = useState([]);
@@ -12,6 +13,8 @@ function OrdersPanel({ onTestInChat }) {
   const [createdOrderNumber, setCreatedOrderNumber] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
   const [copyResult, setCopyResult] = useState(null);
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [updatedOrderNumber, setUpdatedOrderNumber] = useState("");
   useEffect(() => {
     let cancelled = false;
 
@@ -72,6 +75,12 @@ function OrdersPanel({ onTestInChat }) {
     handleRefresh();
   }
 
+  function handleOrderUpdated(order) {
+    setEditingOrder(null);
+    setUpdatedOrderNumber(order.order_number);
+    handleRefresh();
+  }
+
   async function handleCopyOrderNumber(orderNumber) {
     try {
       await navigator.clipboard.writeText(orderNumber);
@@ -118,6 +127,8 @@ function OrdersPanel({ onTestInChat }) {
           <button
             type="button"
             onClick={() => {
+              setEditingOrder(null);
+              setUpdatedOrderNumber("");
               setCreatedOrderNumber("");
               setShowCreateForm((current) => !current);
             }}
@@ -175,6 +186,24 @@ function OrdersPanel({ onTestInChat }) {
         />
       )}
 
+      {editingOrder && (
+        <EditOrderForm
+          key={editingOrder.id}
+          order={editingOrder}
+          onUpdated={handleOrderUpdated}
+          onCancel={() => setEditingOrder(null)}
+        />
+      )}
+
+      {updatedOrderNumber && (
+        <div
+          role="status"
+          className="mb-5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 p-4 text-sm text-indigo-300"
+        >
+          Order {updatedOrderNumber} updated successfully.
+        </div>
+      )}
+
       <div className="mb-5">
         <input
           type="search"
@@ -210,6 +239,7 @@ function OrdersPanel({ onTestInChat }) {
               <th className="px-5 py-4 font-medium">Amount</th>
 
               <th className="px-5 py-4 font-medium">Type</th>
+              <th className="px-5 py-4 font-medium">Actions</th>
             </tr>
           </thead>
 
@@ -276,8 +306,6 @@ function OrdersPanel({ onTestInChat }) {
                         </svg>
                       )}
                     </button>
-
-                    
                   </div>
 
                   {copyResult?.orderNumber === order.order_number &&
@@ -318,6 +346,24 @@ function OrdersPanel({ onTestInChat }) {
                     <span className="rounded-md bg-slate-800 px-3 py-1 text-xs text-slate-400">
                       Seeded
                     </span>
+                  )}
+                </td>
+                <td className="px-5 py-4">
+                  {order.is_demo_managed ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingOrder(order);
+                        setShowCreateForm(false);
+                        setCreatedOrderNumber("");
+                        setUpdatedOrderNumber("");
+                      }}
+                      className="rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-200 transition hover:border-indigo-500 hover:bg-indigo-500/10 hover:text-indigo-300"
+                    >
+                      Edit
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-500">Protected</span>
                   )}
                 </td>
               </tr>
