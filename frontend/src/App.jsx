@@ -233,6 +233,21 @@ function App() {
     }
   }
 
+  function handleTestOrderInChat(orderNumber) {
+    setActiveConversationId(null);
+
+    setMessages([]);
+    setMetadata(null);
+    setPendingAction(null);
+    setError("");
+
+    setMessage(
+      `Tell me about order ${orderNumber}. What is its current status, and what shipping or delivery details are available?`,
+    );
+
+    setActiveView("chat");
+  }
+
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-slate-950 text-slate-100">
       <header className="flex shrink-0 items-center justify-between border-b border-slate-800 px-6 py-3">
@@ -302,7 +317,7 @@ function App() {
           <IntelligencePanel metadata={metadata} />
         </div>
       ) : (
-        <OrdersPanel />
+        <OrdersPanel onTestInChat={handleTestOrderInChat} />
       )}
     </main>
   );

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { getDemoOrders } from "../api/orders";
 import CreateOrderForm from "./CreateOrderForm";
 
-function OrdersPanel() {
+function OrdersPanel({ onTestInChat }) {
   const [orders, setOrders] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -136,6 +136,14 @@ function OrdersPanel() {
               className="rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-4 py-2.5 text-sm font-medium text-indigo-300 transition hover:bg-indigo-500/20"
             >
               Copy Order Number
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onTestInChat(createdOrderNumber)}
+              className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-500"
+            >
+              Test in Chat →
             </button>
           </div>
 
