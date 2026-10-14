@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { createDemoOrder } from "../api/orders";
-
+import { ORDER_PRESETS, getOrderPresetForm } from "../config/orderPresets";
 const initialForm = {
   status: "processing",
   payment_status: "paid",
@@ -13,7 +13,9 @@ const initialForm = {
 };
 
 function CreateOrderForm({ onCreated, onCancel }) {
-  const [form, setForm] = useState(initialForm);
+  const [selectedPreset, setSelectedPreset] = useState("custom");
+
+  const [form, setForm] = useState(() => getOrderPresetForm("custom"));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const showShippingFields =
@@ -23,6 +25,14 @@ function CreateOrderForm({ onCreated, onCancel }) {
 
   const estimatedDeliveryRef = useRef(null);
 
+  function handlePresetChange(event) {
+    const presetId = event.target.value;
+
+    setSelectedPreset(presetId);
+    setForm(getOrderPresetForm(presetId));
+    setError("");
+  }
+
   function handleChange(event) {
     const { name, value } = event.target;
 
@@ -30,6 +40,8 @@ function CreateOrderForm({ onCreated, onCancel }) {
       ...current,
       [name]: value,
     }));
+
+    setSelectedPreset("custom");
   }
 
   function openEstimatedDeliveryPicker() {
@@ -129,6 +141,40 @@ function CreateOrderForm({ onCreated, onCancel }) {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-5">
+          <label
+            htmlFor="scenario-preset"
+            className="mb-2 block text-sm font-semibold text-indigo-300"
+          >
+            Select Test Scenario
+          </label>
+
+          <select
+            id="scenario-preset"
+            value={selectedPreset}
+            onChange={handlePresetChange}
+            disabled={submitting}
+            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-indigo-500"
+          >
+            {ORDER_PRESETS.map((preset) => (
+              <option key={preset.id} value={preset.id}>
+                {preset.label}
+              </option>
+            ))}
+          </select>
+
+          <p className="mt-3 text-xs leading-5 text-slate-400">
+            {
+              ORDER_PRESETS.find((preset) => preset.id === selectedPreset)
+                ?.description
+            }
+          </p>
+
+          <p className="mt-2 text-xs text-slate-500">
+            Selecting a scenario automatically populates the order fields. You
+            can modify any value before creating the order.
+          </p>
+        </div>
         <div className="grid gap-5 md:grid-cols-2">
           <div>
             <label
