@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.routes import (
@@ -16,7 +16,7 @@ from src.rag.pipeline import (
 from src.rag.providers.groq_provider import (
     GroqGenerator,
 )
-
+from src.api.dependencies import require_private_conversations
 
 @asynccontextmanager
 async def lifespan(
@@ -59,6 +59,7 @@ app.include_router(
 app.include_router(
     conversations.router,
     prefix="/api/v1",
+    dependencies=[Depends(require_private_conversations)],
 )
 
 app.include_router(
