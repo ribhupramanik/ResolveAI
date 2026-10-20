@@ -386,6 +386,7 @@ def test_demo_orders_update_persists_status_change():
                 total_amount=Decimal("2499.00"),
                 currency="INR",
                 shipping_address="Kolkata, West Bengal",
+                is_demo_managed=True,
             )
 
             db.add(order)
@@ -492,6 +493,7 @@ def test_demo_orders_update_rejects_invalid_fields():
                 total_amount=Decimal("2499.00"),
                 currency="INR",
                 shipping_address="Kolkata, West Bengal",
+                is_demo_managed=True,
             )
 
             db.add(order)
@@ -586,6 +588,7 @@ def test_demo_orders_update_rejects_order_with_pending_action():
                 total_amount=Decimal("2499.00"),
                 currency="INR",
                 shipping_address="Kolkata, West Bengal",
+                is_demo_managed=True,
             )
 
             db.add(order)
@@ -697,6 +700,7 @@ def test_demo_orders_update_rejects_order_with_refund_history():
                 total_amount=Decimal("2499.00"),
                 currency="INR",
                 shipping_address="Kolkata, West Bengal",
+                is_demo_managed=True,
             )
 
             db.add(order)
