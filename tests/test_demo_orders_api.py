@@ -1392,3 +1392,66 @@ def test_demo_orders_auto_generated_numbers_are_unique():
                 )
 
             db.commit()
+
+
+def test_demo_orders_update_rejects_seeded_order():
+    assert engine.url.database == "resolveai_test"
+
+    token = uuid4().hex
+    order_number = f"ORD-{uuid4().int % 10**18:018d}"
+
+    customer_code = f"TST-SEED-UP-{token[:12]}"
+
+    try:
+        with SessionLocal() as db:
+            customer = Customer(
+                customer_code=customer_code,
+                name="Protected Seeded Customer",
+                email=f"seeded-update-{token}@example.com",
+            )
+
+            db.add(customer)
+            db.flush()
+
+            order = Order(
+                order_number=order_number,
+                customer_id=customer.id,
+                status="processing",
+                payment_status="paid",
+                total_amount=Decimal("2499.00"),
+                currency="INR",
+                shipping_address="Demo Test Address",
+                is_demo_managed=False,
+            )
+
+            db.add(order)
+            db.flush()
+
+            order_id = order.id
+
+            db.commit()
+
+        with TestClient(app) as client:
+            response = client.patch(
+                f"/api/v1/demo/orders/{order_id}",
+                json={"status": "shipped"},
+            )
+
+        assert response.status_code == 403, response.text
+
+        assert response.json()["detail"] == ("Only demo-managed orders can be updated.")
+
+        with SessionLocal() as db:
+            stored_order = db.get(Order, order_id)
+
+            assert stored_order is not None
+            assert stored_order.status == "processing"
+            assert stored_order.is_demo_managed is False
+
+    finally:
+        with SessionLocal() as db:
+            db.execute(delete(Order).where(Order.order_number == order_number))
+
+            db.execute(delete(Customer).where(Customer.customer_code == customer_code))
+
+            db.commit()

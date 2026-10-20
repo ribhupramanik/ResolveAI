@@ -209,6 +209,12 @@ def update_demo_order(
             detail="Order not found.",
         )
 
+    if not order.is_demo_managed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only demo-managed orders can be updated.",
+        )
+
     existing_action = db.scalar(
         select(PendingAction.id)
         .where(
