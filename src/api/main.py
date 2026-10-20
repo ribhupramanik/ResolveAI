@@ -1,9 +1,9 @@
+
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.dependencies import require_private_conversations
 from src.api.routes import (
     chat,
     conversations,
@@ -11,12 +11,8 @@ from src.api.routes import (
     health,
     orders,
 )
-from src.rag.pipeline import (
-    ResolveAIPipeline,
-)
-from src.rag.providers.groq_provider import (
-    GroqGenerator,
-)
+from src.rag.pipeline import ResolveAIPipeline
+from src.rag.providers.groq_provider import GroqGenerator
 
 
 @asynccontextmanager
@@ -60,7 +56,6 @@ app.include_router(
 app.include_router(
     conversations.router,
     prefix="/api/v1",
-    dependencies=[Depends(require_private_conversations)],
 )
 
 app.include_router(
