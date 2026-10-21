@@ -1,9 +1,9 @@
-
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.rate_limit import AIRateLimitMiddleware
 from src.api.routes import (
     chat,
     conversations,
@@ -29,6 +29,12 @@ app = FastAPI(
     description=("API for the ResolveAI customer-support intelligence platform."),
     version="0.1.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    AIRateLimitMiddleware,
+    max_requests=10,
+    window_seconds=60,
 )
 
 app.add_middleware(
