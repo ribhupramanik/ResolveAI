@@ -17,6 +17,7 @@ class AIRateLimitMiddleware(BaseHTTPMiddleware):
         window_seconds: int = 60,
         max_daily_requests: int = 30,
         daily_window_seconds: int = 86400,
+        max_concurrent_requests: int | None = None,
     ):
         super().__init__(app)
 
@@ -31,13 +32,18 @@ class AIRateLimitMiddleware(BaseHTTPMiddleware):
         ):
             raise ValueError("Rate limit values must be positive.")
 
+        if max_concurrent_requests is not None and max_concurrent_requests <= 0:
+            raise ValueError("Concurrent request limit must be positive.")
+
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         self.max_daily_requests = max_daily_requests
         self.daily_window_seconds = daily_window_seconds
+        self.max_concurrent_requests = max_concurrent_requests
 
         self.timestamps = deque()
         self.daily_timestamps = deque()
+        self.active_requests = 0
         self.lock = Lock()
 
     async def dispatch(self, request: Request, call_next):
@@ -92,7 +98,22 @@ class AIRateLimitMiddleware(BaseHTTPMiddleware):
                     headers={"Retry-After": str(retry_after)},
                 )
 
+            if (
+                self.max_concurrent_requests is not None
+                and self.active_requests >= self.max_concurrent_requests
+            ):
+                return JSONResponse(
+                    status_code=503,
+                    content={"detail": "AI service is busy. Try again shortly."},
+                    headers={"Retry-After": "1"},
+                )
+
             self.timestamps.append(now)
             self.daily_timestamps.append(now)
+            self.active_requests += 1
 
-        return await call_next(request)
+        try:
+            return await call_next(request)
+        finally:
+            with self.lock:
+                self.active_requests -= 1

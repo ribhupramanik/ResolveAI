@@ -31,11 +31,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
 app.add_middleware(
     AIRateLimitMiddleware,
     max_requests=10,
     window_seconds=60,
+    max_daily_requests=30,
+    daily_window_seconds=86400,
 )
+
 
 app.add_middleware(
     CORSMiddleware,

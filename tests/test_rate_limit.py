@@ -1,4 +1,6 @@
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -124,3 +126,54 @@ def test_ai_daily_budget_is_enforced():
     ]
 
     assert int(responses[3].headers["Retry-After"]) > 0
+
+
+def test_ai_concurrency_limit_rejects_overlapping_requests():
+    app = FastAPI()
+
+    app.add_middleware(
+        AIRateLimitMiddleware,
+        max_requests=10,
+        window_seconds=60,
+        max_daily_requests=30,
+        daily_window_seconds=86400,
+        max_concurrent_requests=1,
+    )
+
+    started = Event()
+    release = Event()
+
+    @app.post("/api/v1/chat")
+    async def chat():
+        started.set()
+        await asyncio.to_thread(release.wait, 5)
+        return {"ok": True}
+
+    @app.post("/api/v1/conversations/{conversation_id}/messages")
+    async def send_message(conversation_id: int):
+        return {"ok": True}
+
+    with TestClient(app) as client:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            first_future = executor.submit(
+                client.post,
+                "/api/v1/chat",
+            )
+
+            try:
+                assert started.wait(timeout=5)
+
+                second = client.post("/api/v1/conversations/1/messages")
+
+                assert second.status_code == 503
+                assert second.headers["Retry-After"] == "1"
+
+            finally:
+                release.set()
+
+            first = first_future.result(timeout=5)
+            assert first.status_code == 200
+
+        third = client.post("/api/v1/conversations/1/messages")
+
+        assert third.status_code == 200
