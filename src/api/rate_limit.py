@@ -15,15 +15,29 @@ class AIRateLimitMiddleware(BaseHTTPMiddleware):
         app,
         max_requests: int = 10,
         window_seconds: int = 60,
+        max_daily_requests: int = 30,
+        daily_window_seconds: int = 86400,
     ):
         super().__init__(app)
 
-        if max_requests < 1 or window_seconds <= 0:
+        if any(
+            value <= 0
+            for value in (
+                max_requests,
+                window_seconds,
+                max_daily_requests,
+                daily_window_seconds,
+            )
+        ):
             raise ValueError("Rate limit values must be positive.")
 
         self.max_requests = max_requests
         self.window_seconds = window_seconds
+        self.max_daily_requests = max_daily_requests
+        self.daily_window_seconds = daily_window_seconds
+
         self.timestamps = deque()
+        self.daily_timestamps = deque()
         self.lock = Lock()
 
     async def dispatch(self, request: Request, call_next):
@@ -46,9 +60,13 @@ class AIRateLimitMiddleware(BaseHTTPMiddleware):
 
         with self.lock:
             cutoff = now - self.window_seconds
+            daily_cutoff = now - self.daily_window_seconds
 
             while self.timestamps and self.timestamps[0] <= cutoff:
                 self.timestamps.popleft()
+
+            while self.daily_timestamps and self.daily_timestamps[0] <= daily_cutoff:
+                self.daily_timestamps.popleft()
 
             if len(self.timestamps) >= self.max_requests:
                 retry_after = max(
@@ -62,6 +80,19 @@ class AIRateLimitMiddleware(BaseHTTPMiddleware):
                     headers={"Retry-After": str(retry_after)},
                 )
 
+            if len(self.daily_timestamps) >= self.max_daily_requests:
+                retry_after = max(
+                    1,
+                    ceil(self.daily_window_seconds - (now - self.daily_timestamps[0])),
+                )
+
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Daily AI request budget exceeded."},
+                    headers={"Retry-After": str(retry_after)},
+                )
+
             self.timestamps.append(now)
+            self.daily_timestamps.append(now)
 
         return await call_next(request)

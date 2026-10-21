@@ -89,3 +89,38 @@ def test_ai_rate_limit_handles_concurrent_requests():
 
     assert status_codes.count(200) == 3
     assert status_codes.count(429) == 17
+
+
+def test_ai_daily_budget_is_enforced():
+    app = FastAPI()
+
+    app.add_middleware(
+        AIRateLimitMiddleware,
+        max_requests=10,
+        window_seconds=60,
+        max_daily_requests=3,
+        daily_window_seconds=86400,
+    )
+
+    @app.post("/api/v1/chat")
+    def chat():
+        return {"ok": True}
+
+    with (
+        TestClient(app) as client,
+        patch(
+            "src.api.rate_limit.monotonic",
+            side_effect=[0, 61, 122, 183, 86401],
+        ),
+    ):
+        responses = [client.post("/api/v1/chat") for _ in range(5)]
+
+    assert [response.status_code for response in responses] == [
+        200,
+        200,
+        200,
+        429,
+        200,
+    ]
+
+    assert int(responses[3].headers["Retry-After"]) > 0
