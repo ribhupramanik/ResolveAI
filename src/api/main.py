@@ -38,6 +38,7 @@ app.add_middleware(
     window_seconds=60,
     max_daily_requests=30,
     daily_window_seconds=86400,
+    max_concurrent_requests=1,
 )
 
 
