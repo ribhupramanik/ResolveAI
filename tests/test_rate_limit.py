@@ -177,3 +177,39 @@ def test_ai_concurrency_limit_rejects_overlapping_requests():
         third = client.post("/api/v1/conversations/1/messages")
 
         assert third.status_code == 200
+
+
+def test_ai_concurrency_slot_released_after_failure():
+    app = FastAPI()
+
+    app.add_middleware(
+        AIRateLimitMiddleware,
+        max_requests=10,
+        window_seconds=60,
+        max_daily_requests=30,
+        daily_window_seconds=86400,
+        max_concurrent_requests=1,
+    )
+
+    attempts = 0
+
+    @app.post("/api/v1/chat")
+    async def chat():
+        nonlocal attempts
+        attempts += 1
+
+        if attempts == 1:
+            raise RuntimeError("Simulated AI failure")
+
+        return {"ok": True}
+
+    with TestClient(
+        app,
+        raise_server_exceptions=False,
+    ) as client:
+        first = client.post("/api/v1/chat")
+        second = client.post("/api/v1/chat")
+
+    assert first.status_code == 500
+    assert second.status_code == 200
+    assert attempts == 2
