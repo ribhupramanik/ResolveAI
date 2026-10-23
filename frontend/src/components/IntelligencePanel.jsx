@@ -1,6 +1,8 @@
-function IntelligencePanel({ metadata }) {
+function IntelligencePanel({ metadata, mobileActive = false }) {
   return (
-    <aside className="hidden h-full min-h-0 w-80 shrink-0 overflow-y-auto overscroll-contain border-l border-slate-800 bg-slate-900/40 xl:block">
+    <aside
+      className={`${mobileActive ? "block" : "hidden"} h-full min-h-0 w-full overflow-y-auto overscroll-contain border-l border-slate-800 bg-slate-900/40 xl:block xl:w-80 xl:shrink-0`}
+    >
       <div className="border-b border-slate-800 px-5 py-4">
         <h2 className="font-semibold">AI Intelligence</h2>
 

@@ -35,6 +35,8 @@ function App() {
 
   const [activeView, setActiveView] = useState("chat");
 
+  const [chatPane, setChatPane] = useState("chat");
+
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -246,6 +248,7 @@ function App() {
     );
 
     setActiveView("chat");
+    setChatPane("chat");
   }
 
   return (
@@ -294,27 +297,65 @@ function App() {
       </header>
 
       {activeView === "chat" ? (
-        <div className="flex min-h-0 flex-1">
-          <ConversationSidebar
-            conversations={conversations}
-            activeConversationId={activeConversationId}
-            onSelectConversation={setActiveConversationId}
-            onNewConversation={handleNewConversation}
-          />
+        <div className="flex min-h-0 flex-1 flex-col">
+          <nav
+            className="grid grid-cols-3 gap-2 border-b border-slate-800 p-2 xl:hidden"
+            aria-label="Chat panels"
+          >
+            {[
+              ["conversations", "Conversations"],
+              ["chat", "Chat"],
+              ["intelligence", "AI Insights"],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={chatPane === key}
+                onClick={() => setChatPane(key)}
+                className={`rounded-lg px-2 py-2 text-xs font-semibold ${
+                  chatPane === key
+                    ? "bg-indigo-600 text-white"
+                    : "bg-slate-900 text-slate-300"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
 
-          <ChatPanel
-            messages={messages}
-            message={message}
-            setMessage={setMessage}
-            loading={loading}
-            error={error}
-            onSubmit={handleSubmit}
-            pendingAction={pendingAction}
-            actionLoading={actionLoading}
-            onPendingActionDecision={handlePendingActionDecision}
-          />
+          <div className="flex min-h-0 flex-1">
+            <ConversationSidebar
+              conversations={conversations}
+              activeConversationId={activeConversationId}
+              mobileActive={chatPane === "conversations"}
+              onSelectConversation={(id) => {
+                setActiveConversationId(id);
+                setChatPane("chat");
+              }}
+              onNewConversation={() => {
+                setChatPane("chat");
+                handleNewConversation();
+              }}
+            />
 
-          <IntelligencePanel metadata={metadata} />
+            <ChatPanel
+              mobileActive={chatPane === "chat"}
+              messages={messages}
+              message={message}
+              setMessage={setMessage}
+              loading={loading}
+              error={error}
+              onSubmit={handleSubmit}
+              pendingAction={pendingAction}
+              actionLoading={actionLoading}
+              onPendingActionDecision={handlePendingActionDecision}
+            />
+
+            <IntelligencePanel
+              metadata={metadata}
+              mobileActive={chatPane === "intelligence"}
+            />
+          </div>
         </div>
       ) : (
         <OrdersPanel onTestInChat={handleTestOrderInChat} />

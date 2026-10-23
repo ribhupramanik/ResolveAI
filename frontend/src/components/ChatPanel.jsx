@@ -10,6 +10,7 @@ function ChatPanel({
   pendingAction,
   actionLoading,
   onPendingActionDecision,
+  mobileActive = true,
 }) {
   const isCancellationPending =
     pendingAction?.action_type === "cancel_order" &&
@@ -46,7 +47,9 @@ function ChatPanel({
     : "Ask ResolveAI...";
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-slate-950">
+    <section
+      className={`${mobileActive ? "flex" : "hidden"} min-h-0 min-w-0 flex-1 flex-col bg-slate-950 xl:flex`}
+    >
       <header className="border-b border-slate-800 px-6 py-4">
         <h2 className="font-semibold">Customer Conversation</h2>
 
