@@ -253,15 +253,15 @@ function App() {
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-slate-950 text-slate-100">
-      <header className="flex shrink-0 flex-col gap-3 border-b border-slate-800 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-5 sm:px-6">
-        <div className="flex items-center gap-3">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-800 px-3 py-3 sm:px-6">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-lg font-bold text-white">
             R
           </div>
 
           <div>
             <h1 className="text-lg font-semibold tracking-tight">ResolveAI</h1>
-            <p className="text-xs text-slate-400">
+            <p className="max-w-[145px] text-xs leading-4 text-slate-400 sm:max-w-none">
               Intelligent Customer Support
             </p>
           </div>
