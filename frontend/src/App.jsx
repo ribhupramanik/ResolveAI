@@ -253,7 +253,7 @@ function App() {
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-slate-950 text-slate-100">
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-800 px-6 py-3">
+      <header className="flex shrink-0 flex-col gap-3 border-b border-slate-800 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-5 sm:px-6">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-lg font-bold text-white">
             R
@@ -267,7 +267,10 @@ function App() {
           </div>
         </div>
 
-        <nav className="flex items-center gap-2" aria-label="Main navigation">
+        <nav
+          className="flex items-center justify-end gap-2"
+          aria-label="Main navigation"
+        >
           <button
             type="button"
             aria-pressed={activeView === "chat"}
