@@ -1,13 +1,41 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 export async function getConversations() {
-  const response = await fetch(`${API_BASE_URL}/api/v1/conversations`);
+  const retryDelays = [2000, 4000, 6000, 8000];
 
-  if (!response.ok) {
-    throw new Error("Failed to load conversations.");
+  for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/conversations`);
+
+      if (response.ok) {
+        return response.json();
+      }
+
+      if (![502, 503, 504].includes(response.status)) {
+        throw new Error(
+          `Failed to load conversations (HTTP ${response.status}).`,
+        );
+      }
+
+      if (attempt === retryDelays.length) {
+        throw new Error(
+          `ResolveAI server is temporarily unavailable (HTTP ${response.status}).`,
+        );
+      }
+    } catch (err) {
+      if (!(err instanceof TypeError)) {
+        throw err;
+      }
+
+      if (attempt === retryDelays.length) {
+        throw new Error("Unable to connect to ResolveAI. Please try again.", {
+          cause: err,
+        });
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, retryDelays[attempt]));
   }
-
-  return response.json();
 }
 
 export async function createConversation() {

@@ -19,6 +19,9 @@ import IntelligencePanel from "./components/IntelligencePanel";
 function App() {
   const [conversations, setConversations] = useState([]);
 
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [initialError, setInitialError] = useState("");
+
   const [activeConversationId, setActiveConversationId] = useState(null);
 
   const [messages, setMessages] = useState([]);
@@ -40,33 +43,40 @@ function App() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    loadConversations();
+    loadConversations(true);
   }, []);
 
   useEffect(() => {
-    if (!activeConversationId) {
-      setMessages([]);
-      setMetadata(null);
-      setPendingAction(null);
-      return;
+    if (activeConversationId !== null) {
+      loadConversationData(activeConversationId);
     }
-
-    loadConversationData(activeConversationId);
   }, [activeConversationId]);
 
-  async function loadConversations() {
+  async function loadConversations(isInitial = false) {
+    if (isInitial) {
+      setInitialLoading(true);
+      setInitialError("");
+    }
+
     try {
       const data = await getConversations();
 
       setConversations(data);
 
-      if (data.length > 0 && !activeConversationId) {
-        setActiveConversationId(data[0].id);
-      }
+      setActiveConversationId((current) => current ?? data[0]?.id ?? null);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load conversations.",
-      );
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to load conversations.";
+
+      if (isInitial) {
+        setInitialError(errorMessage);
+      } else {
+        setError(errorMessage);
+      }
+    } finally {
+      if (isInitial) {
+        setInitialLoading(false);
+      }
     }
   }
 
@@ -299,7 +309,39 @@ function App() {
         </nav>
       </header>
 
-      {activeView === "chat" ? (
+      {activeView === "chat" && (initialLoading || initialError) ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
+          {initialLoading ? (
+            <div
+              className="flex flex-col items-center gap-4"
+              role="status"
+              aria-live="polite"
+            >
+              <div
+                className="h-12 w-12 animate-spin rounded-full border-4 border-slate-700 border-t-indigo-500"
+                aria-hidden="true"
+              />
+              <p className="text-sm text-slate-300">
+                Connecting to ResolveAI...
+              </p>
+              <p className="text-xs text-slate-500">
+                Loading your conversations
+              </p>
+            </div>
+          ) : (
+            <div role="alert" className="flex flex-col items-center gap-4">
+              <p className="text-sm text-red-300">{initialError}</p>
+              <button
+                type="button"
+                onClick={() => loadConversations(true)}
+                className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+        </div>
+      ) : activeView === "chat" ? (
         <div className="flex min-h-0 flex-1 flex-col">
           <nav
             className="grid grid-cols-3 gap-2 border-b border-slate-800 p-2 xl:hidden"
