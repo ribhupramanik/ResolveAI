@@ -14,9 +14,13 @@
 ![Docker](https://img.shields.io/badge/Docker-Local_DB-2496ED?logo=docker&logoColor=white)
 ![Status](https://img.shields.io/badge/Status-Portfolio_Demo-6366F1)
 
+**[Try the Live Demo](https://resolve-ai-omega-lime.vercel.app/)**
+
 **[Explore the architecture](#system-architecture) · [See the demo workflow](#demo-walkthrough) · [Run locally](#getting-started) · [Explore the API](#api-overview)**
 
-**Public deployment:** planned · **Current state:** working local demonstration
+**Live Demo:** [Try ResolveAI](https://resolve-ai-omega-lime.vercel.app/)
+
+**Deployment:** React on Vercel · FastAPI on Northflank · PostgreSQL + pgvector on Neon · LLM inference via Groq
 
 </div>
 
@@ -34,16 +38,16 @@ The project is designed as both a functioning application and an **inspectable A
 
 ## At a glance
 
-| Capability | What ResolveAI demonstrates |
-| --- | --- |
-| Retrieval-augmented responses | Contextual retrieval over embedded customer-support examples and verified knowledge |
-| Live operational grounding | Order and refund information obtained through database-backed tools |
-| Guarded generation | First-pass validation, a targeted retry when needed, and a deterministic safe fallback |
-| Human-in-the-loop actions | Explicit Confirm/Reject flow before supported cancellations and refund initiation |
-| State consistency | Transactional execution, eligibility rechecks, and audit records |
-| Explainable demo UI | Response-validation status, tool execution, evidence counts, model/provider and correction details |
-| Scenario management | Create, view, edit, delete, and test demo orders without manually managing IDs |
-| Test coverage | Backend regression tests for APIs, action lifecycles, error cases and integrity protections |
+| Capability                    | What ResolveAI demonstrates                                                                        |
+| ----------------------------- | -------------------------------------------------------------------------------------------------- |
+| Retrieval-augmented responses | Contextual retrieval over embedded customer-support examples and verified knowledge                |
+| Live operational grounding    | Order and refund information obtained through database-backed tools                                |
+| Guarded generation            | First-pass validation, a targeted retry when needed, and a deterministic safe fallback             |
+| Human-in-the-loop actions     | Explicit Confirm/Reject flow before supported cancellations and refund initiation                  |
+| State consistency             | Transactional execution, eligibility rechecks, and audit records                                   |
+| Explainable demo UI           | Response-validation status, tool execution, evidence counts, model/provider and correction details |
+| Scenario management           | Create, view, edit, delete, and test demo orders without manually managing IDs                     |
+| Test coverage                 | Backend regression tests for APIs, action lifecycles, error cases and integrity protections        |
 
 > **Operational boundary:** Refund initiation in ResolveAI is an **internal database workflow**, not a charge reversal through a live bank, payment processor, or courier service. Tracking details come from stored order records; there is no live carrier-location feed.
 
@@ -168,30 +172,30 @@ flowchart TD
 
 ### AI request lifecycle
 
-| Phase | Responsibility |
-| --- | --- |
-| Request | Receive a customer message in a persistent conversation |
-| Tool routing | Detect supported order, cancellation and refund intents; obtain structured results |
-| Retrieval | Fetch relevant support context and verified knowledge |
+| Phase            | Responsibility                                                                         |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| Request          | Receive a customer message in a persistent conversation                                |
+| Tool routing     | Detect supported order, cancellation and refund intents; obtain structured results     |
+| Retrieval        | Fetch relevant support context and verified knowledge                                  |
 | Context assembly | Combine message history, retrieved material, system capabilities and operational facts |
-| Generation | Request a natural-language answer from the configured Groq provider |
-| Validation | Detect selected unsupported factual and action-state claims |
-| Correction | Retry once using validation feedback if the first answer fails |
-| Fallback | Return a safe fixed response when both generated answers are rejected |
-| Persistence | Store conversation messages and AI metadata for later inspection |
+| Generation       | Request a natural-language answer from the configured Groq provider                    |
+| Validation       | Detect selected unsupported factual and action-state claims                            |
+| Correction       | Retry once using validation feedback if the first answer fails                         |
+| Fallback         | Return a safe fixed response when both generated answers are rejected                  |
+| Persistence      | Store conversation messages and AI metadata for later inspection                       |
 
 ### Database entities
 
-| Table | Purpose |
-| --- | --- |
-| `support_tickets` | Support text, intent labels, source split and vector embeddings |
-| `conversations` | Persistent chat sessions |
-| `messages` | User/assistant messages and JSONB AI metadata |
-| `customers` | Customer records, including automatically generated demo customers |
-| `orders` | Status, payment, amount, shipping data and demo-management marker |
-| `refunds` | Internal refund initiation/status history |
-| `pending_actions` | Actions awaiting, receiving, or having received a decision |
-| `action_execution_audits` | Recorded execution outcomes and associated action history |
+| Table                     | Purpose                                                            |
+| ------------------------- | ------------------------------------------------------------------ |
+| `support_tickets`         | Support text, intent labels, source split and vector embeddings    |
+| `conversations`           | Persistent chat sessions                                           |
+| `messages`                | User/assistant messages and JSONB AI metadata                      |
+| `customers`               | Customer records, including automatically generated demo customers |
+| `orders`                  | Status, payment, amount, shipping data and demo-management marker  |
+| `refunds`                 | Internal refund initiation/status history                          |
+| `pending_actions`         | Actions awaiting, receiving, or having received a decision         |
+| `action_execution_audits` | Recorded execution outcomes and associated action history          |
 
 SQLAlchemy models, foreign-key constraints, transactions and Alembic migrations keep the schema and action lifecycle explicit.
 
@@ -199,18 +203,18 @@ SQLAlchemy models, foreign-key constraints, transactions and Alembic migrations 
 
 ## Tech stack
 
-| Layer | Technology |
-| --- | --- |
-| Web client | React 19, Vite, JavaScript, utility-class styling |
-| API | Python 3.12, FastAPI, Pydantic |
-| Data access | SQLAlchemy, PostgreSQL driver |
-| Database | PostgreSQL 16, pgvector, JSONB |
-| AI retrieval | Sentence-transformer embeddings, vector similarity and application-specific knowledge retrieval |
-| Text generation | Groq API through a provider abstraction |
-| Data preparation | Python ingestion and preprocessing modules |
-| Schema changes | Alembic |
-| Local infrastructure | Docker Compose with pgvector-enabled PostgreSQL |
-| Quality checks | pytest, Vite production build, ESLint |
+| Layer                | Technology                                                                                      |
+| -------------------- | ----------------------------------------------------------------------------------------------- |
+| Web client           | React 19, Vite, JavaScript, utility-class styling                                               |
+| API                  | Python 3.12, FastAPI, Pydantic                                                                  |
+| Data access          | SQLAlchemy, PostgreSQL driver                                                                   |
+| Database | PostgreSQL 18 (Neon), pgvector, JSONB |
+| AI retrieval         | Sentence-transformer embeddings, vector similarity and application-specific knowledge retrieval |
+| Text generation      | Groq API through a provider abstraction                                                         |
+| Data preparation     | Python ingestion and preprocessing modules                                                      |
+| Schema changes       | Alembic                                                                                         |
+| Local infrastructure | Docker Compose with pgvector-enabled PostgreSQL                                                 |
+| Quality checks       | pytest, Vite production build, ESLint                                                           |
 
 The model is used through a provider interface. ResolveAI is **not** represented as having trained its own foundation model or fine-tuned the hosted LLM.
 
@@ -218,7 +222,66 @@ The model is used through a provider interface. ResolveAI is **not** represented
 
 ## Demo walkthrough
 
-The following is a practical evaluation path for a reviewer running the application locally.
+The following walkthrough demonstrates how to explore ResolveAI using the publicly hosted application. No local installation is required.
+
+### Try ResolveAI — Recommended Demo Workflow
+
+**[Launch the Live Demo](https://resolve-ai-omega-lime.vercel.app/)**
+
+ResolveAI is an interactive customer-support AI demonstration. The best way to explore its capabilities is to **create a sample order first, then ask questions about that order in a new conversation**.
+
+**Step 1 — Create a demo order**
+
+1. Open the live demo and navigate to the **Orders** section.
+2. Click **+ Create Order**.
+3. Choose a predefined scenario or configure your own order details, including order status, payment status, amount, carrier, tracking number, and estimated delivery date.
+4. Submit the form. ResolveAI automatically generates a customer and a unique order number.
+5. **Copy the generated order number**, such as `ORD-10001`.
+
+**Step 2 — Start a new conversation**
+
+1. Navigate to **Chat**.
+2. Click **+ New conversation**. On mobile, select the **Conversations** tab to access this option.
+3. Ask ResolveAI a question using the order number you just created.
+
+For example:
+
+- "What is the current status of order ORD-10001?"
+- "Has my order been paid for?"
+- "Which courier is delivering my order?"
+- "What is the tracking number and estimated delivery date?"
+- "Can I cancel order ORD-10001?"
+- "Am I eligible for a refund on order ORD-10001?"
+
+Replace `ORD-10001` with your own generated order number.
+
+**Step 3 — Inspect how ResolveAI works**
+
+After receiving an AI-generated response, open **AI Intelligence** on desktop or **AI Insights** on mobile.
+
+This panel displays:
+
+- **Tool execution:** Which database-backed tool ResolveAI used.
+- **Retrieved examples:** How many relevant support examples were retrieved.
+- **Verified knowledge:** Additional knowledge used to ground the response.
+- **Response validation:** Whether the generated response passed validation.
+- **Generation attempts:** Whether ResolveAI needed to retry and correct its response.
+- **Model and provider:** The LLM used to generate the answer.
+
+Compare the AI's response with the actual order information displayed in **Orders → View**.
+
+**Step 4 — Explore additional scenarios**
+
+Try creating different orders to explore:
+
+- **Shipped orders:** Check courier and tracking information.
+- **Processing orders:** Ask about cancellation eligibility and test the confirmation workflow.
+- **Delivered orders:** Explore refund eligibility and internal refund initiation.
+- **Orders without tracking information:** Check whether ResolveAI acknowledges missing information rather than inventing it.
+
+You can also use **Test in Chat** from the Orders section to prepare an order-specific question automatically.
+
+> **Demo environment:** ResolveAI uses shared synthetic data. Conversations and demo orders may be visible to other visitors. Do not enter real customer information or sensitive personal details. Cancellation and refund operations are simulated within the application; they do not affect real purchases or transfer money.
 
 ### Scenario A — Accurate shipment details
 
@@ -251,7 +314,7 @@ The following is a practical evaluation path for a reviewer running the applicat
 3. Test the confirmation-based internal refund initiation flow when appropriate.
 4. Compare the resulting refund status with the stored order/refund records.
 
-**Important:** These scenarios demonstrate local business-rule behavior; they do not initiate external payment transfers or call carrier-tracking services.
+**Important:** These scenarios demonstrate ResolveAI's simulated business-rule workflows. They do not initiate external payment transfers or call live carrier-tracking services.
 
 ---
 
@@ -271,7 +334,6 @@ The following is a practical evaluation path for a reviewer running the applicat
 git clone https://github.com/ribhupramanik/ResolveAI.git
 cd ResolveAI
 ```
-
 
 ### 2. Start PostgreSQL with pgvector
 
@@ -361,7 +423,7 @@ npm run dev
 
 Open **http://localhost:5173**.
 
-> **Local setup note:** The repo's CORS configuration is intended for localhost development. A public frontend origin must be allowed explicitly before deployment.
+> **CORS note:** The FastAPI backend allows the local development origins and the deployed Vercel frontend. When deploying the frontend to a different domain, update the allowed origins in the backend CORS configuration.
 
 ---
 
@@ -369,21 +431,21 @@ Open **http://localhost:5173**.
 
 FastAPI exposes interactive endpoint schemas at `/docs`. Representative application endpoints:
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/v1/conversations` | List conversations |
-| `POST` | `/api/v1/conversations` | Create a conversation |
-| `GET` | `/api/v1/conversations/{id}/messages` | Retrieve message history |
-| `POST` | `/api/v1/conversations/{id}/messages` | Send a message to ResolveAI |
-| `GET` | `/api/v1/conversations/{id}/pending-action` | Inspect current pending action |
-| `POST` | `/api/v1/conversations/{id}/pending-actions/{action_id}/confirm-and-execute` | Confirm and execute supported cancellation action |
-| `POST` | `/api/v1/conversations/{id}/pending-actions/{action_id}/refund/confirm-and-execute` | Confirm and initiate internal refund |
-| `POST` | `/api/v1/conversations/{id}/pending-actions/{action_id}/reject` | Reject a pending action |
-| `GET` | `/api/v1/orders/{order_number}` | Look up an order |
-| `GET` | `/api/v1/demo/orders` | List order scenarios |
-| `POST` | `/api/v1/demo/orders` | Create a demo order; number/customer may be generated |
-| `PATCH` | `/api/v1/demo/orders/{order_id}` | Update editable order properties |
-| `DELETE` | `/api/v1/demo/orders/{order_id}` | Delete an eligible demo-managed order |
+| Method   | Endpoint                                                                            | Purpose                                               |
+| -------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `GET`    | `/api/v1/conversations`                                                             | List conversations                                    |
+| `POST`   | `/api/v1/conversations`                                                             | Create a conversation                                 |
+| `GET`    | `/api/v1/conversations/{id}/messages`                                               | Retrieve message history                              |
+| `POST`   | `/api/v1/conversations/{id}/messages`                                               | Send a message to ResolveAI                           |
+| `GET`    | `/api/v1/conversations/{id}/pending-action`                                         | Inspect current pending action                        |
+| `POST`   | `/api/v1/conversations/{id}/pending-actions/{action_id}/confirm-and-execute`        | Confirm and execute supported cancellation action     |
+| `POST`   | `/api/v1/conversations/{id}/pending-actions/{action_id}/refund/confirm-and-execute` | Confirm and initiate internal refund                  |
+| `POST`   | `/api/v1/conversations/{id}/pending-actions/{action_id}/reject`                     | Reject a pending action                               |
+| `GET`    | `/api/v1/orders/{order_number}`                                                     | Look up an order                                      |
+| `GET`    | `/api/v1/demo/orders`                                                               | List order scenarios                                  |
+| `POST`   | `/api/v1/demo/orders`                                                               | Create a demo order; number/customer may be generated |
+| `PATCH`  | `/api/v1/demo/orders/{order_id}`                                                    | Update editable order properties                      |
+| `DELETE` | `/api/v1/demo/orders/{order_id}`                                                    | Delete an eligible demo-managed order                 |
 
 ### Example: create a demo order
 
@@ -504,28 +566,18 @@ ResolveAI is an **engineering portfolio prototype**, not a production financial 
 - Response-validation diagnostics and safe fallback logic.
 - Controlled deletion of demo-managed orders with action/refund history checks.
 
-**Required before an unrestricted public deployment**
-
-- Add access control around demo-data write endpoints and action execution.
-- Isolate visitors' conversations/scenarios or introduce a reliable demo reset mechanism.
-- Add rate limits and quota controls to protect the Groq API key and service resources.
-- Configure deployment-specific CORS, HTTPS, secrets and database networking.
-- Review personally identifiable data, log retention and database backup/reset policies.
-- Verify embedding-model startup memory, vector database size and cold-start performance.
-- Audit all order update paths, especially protection of seeded records and financial-state consistency.
-
-The current demo may be hosted publicly **only after those access and isolation gaps are addressed**. A free-tier deployment may have sleep/cold-start delays and provider quota limits; hosting providers have not yet been selected or validated for this workload.
+ResolveAI is deployed as a publicly accessible engineering portfolio demo using Vercel, Northflank, Neon, and Groq. It uses shared synthetic data and is not intended for real customer records or financial transactions. Authentication, visitor isolation, and additional write-operation safeguards remain future improvements.
 
 ## Current scope and future improvements
 
-| Delivered | Possible next step |
-| --- | --- |
-| Full-stack local chatbot and order-demo interface | Public demo deployment with access controls |
-| Semantic retrieval and grounded operational tools | Retrieval benchmarks and latency measurements |
-| Response validation and retry/fallback | Wider adversarial and missing-data evaluations |
-| Cancellation and internal refund workflows | External system integration in a controlled environment |
-| Manual and preset scenario creation | Automated demo reset and visitor-specific sandboxing |
-| Backend regression tests | CI checks and production observability |
+| Delivered                                         | Possible next step                                      |
+| ------------------------------------------------- | ------------------------------------------------------- |
+| Public full-stack deployment on Vercel, Northflank, Neon, and Groq | Strengthen public API protections and introduce visitor isolation |
+| Semantic retrieval and grounded operational tools | Retrieval benchmarks and latency measurements           |
+| Response validation and retry/fallback            | Wider adversarial and missing-data evaluations          |
+| Cancellation and internal refund workflows        | External system integration in a controlled environment |
+| Manual and preset scenario creation               | Automated demo reset and visitor-specific sandboxing    |
+| Backend regression tests                          | CI checks and production observability                  |
 
 ---
 
